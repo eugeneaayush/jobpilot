@@ -34,9 +34,8 @@ export type AppliedDuplicate =
   | { kind: "fuzzy"; score: number; application: DuplicateApplication };
 
 /**
- * Exact URL, else fuzzy title+company. Both arms sit inside the window: postings get reposted, and
- * an unbounded URL arm blocks the repost forever with no override. Shared by `/applied/check` and
- * the apply guard so advice and enforcement cannot drift apart.
+ * Exact canonical URLs remain duplicates permanently; fuzzy title/company matches stay bounded.
+ * Shared by `/applied/check` and the apply guard so advice and enforcement cannot drift apart.
  */
 export async function findAppliedDuplicate(
   db: DuplicateReader,
@@ -51,7 +50,7 @@ export async function findAppliedDuplicate(
       where: { userId_url: { userId, url } },
       select: MATCH_SELECT,
     });
-    if (exact && exact.appliedAt >= cutoff) {
+    if (exact) {
       return { kind: "url", application: exact };
     }
   }

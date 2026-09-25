@@ -1,0 +1,35 @@
+enum PersonalSpendCategory {
+  search
+  tailoring
+  other
+  @@map("personal_spend_category")
+}
+
+enum PersonalSpendStatus {
+  reserved
+  completed
+  blocked
+  failed
+  uncertain
+  @@map("personal_spend_status")
+}
+
+model PersonalSpendReservation {
+  id String @id @default(uuid())
+  // The migration owns the user FK; this isolated model does not alter User's relation fields.
+  userId String @map("user_id")
+  provider String
+  category PersonalSpendCategory
+  status PersonalSpendStatus @default(reserved)
+  amountMicrousd Int @map("amount_microusd")
+  policyMonth String @map("policy_month")
+  policyTimezone String @map("policy_timezone")
+  requestHash String @map("request_hash")
+  reservedAt DateTime @default(now()) @map("reserved_at")
+  completedAt DateTime? @map("completed_at")
+  nextEligibleAt DateTime? @map("next_eligible_at")
+  receipt Json @default("{}")
+  @@index([userId, reservedAt])
+  @@index([userId, provider, nextEligibleAt])
+  @@map("personal_spend_reservations")
+}

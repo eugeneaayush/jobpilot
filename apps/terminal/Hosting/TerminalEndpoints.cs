@@ -4,6 +4,7 @@ using JobPilot.Terminal.Pilot;
 using JobPilot.Terminal.Realtime;
 using JobPilot.Terminal.Sessions;
 using JobPilot.Terminal.Updates;
+using JobPilot.Terminal.Workers;
 using Microsoft.AspNetCore.Http.HttpResults;
 
 namespace JobPilot.Terminal.Hosting;
@@ -16,6 +17,7 @@ public static class TerminalEndpoints
     /// <summary>Maps health, session, update, and WebSocket endpoints.</summary>
     public static WebApplication MapTerminalEndpoints(this WebApplication app)
     {
+        app.MapStructuredWorkers();
         app.MapGet("/healthz", (SessionManager session, HostInstall install, ProtocolRegistrar registrar, PilotCoordinator pilot) => TypedResults.Ok(CurrentStatus(session, install, registrar, pilot)));
 
         app.MapPost("/sessions/start", Results<Ok<SessionStatus>, ProblemHttpResult> (StartSessionRequest request, SessionManager session, HostInstall install, ProtocolRegistrar registrar, PilotCoordinator pilot) =>

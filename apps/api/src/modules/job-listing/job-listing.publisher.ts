@@ -2,6 +2,7 @@ import { singleton } from "tsyringe";
 import { isPrismaError, PRISMA_ERRORS } from "@/common/errors";
 import { logger } from "@/common/logger";
 import { PrismaClient } from "@/generated/prisma/client";
+import { personalModeEnabled } from "../personal/privacy";
 import { buildListingDraft, type ListingDraft, type ListingSourceJob } from "./listing-draft";
 
 /** What a publish did. The seed reports on these; the write-through callers ignore them. */
@@ -36,6 +37,7 @@ export class JobListingPublisher {
 
   /** A job too thin to publish drafts to null and costs nothing - callers need not pre-filter. */
   async publish(job: ListingSourceJob): Promise<PublishOutcome> {
+    if (personalModeEnabled()) return "skipped";
     const draft = buildListingDraft(job);
     if (!draft) {
       return "skipped";

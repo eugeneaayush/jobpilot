@@ -28,6 +28,20 @@ import { adminBoardController } from "@/modules/job-board/admin-board.controller
 import { jobBoardController } from "@/modules/job-board/job-board.controller";
 import { adminJobListingController, publicJobListingController } from "@/modules/job-listing";
 import { cleanupJob } from "@/modules/maintenance/cleanup.job";
+import { personalApplicationEmailController } from "@/modules/personal/application-email.controller";
+import { personalAttachmentsController } from "@/modules/personal/attachments.controller";
+import { personalAttemptController } from "@/modules/personal/attempt.controller";
+import { personalCampaignController } from "@/modules/personal/campaign.controller";
+import { personalChallengeController } from "@/modules/personal/challenge.controller";
+import { personalChallengeVerificationController } from "@/modules/personal/challenge-verification.controller";
+import { personalHandoffController } from "@/modules/personal/handoff.controller";
+import { personalHostedTransportController } from "@/modules/personal/hosted-transport.controller";
+import { personalController } from "@/modules/personal/personal.controller";
+import { isPrivateOnlyRoute } from "@/modules/personal/privacy";
+import { personalReadinessController } from "@/modules/personal/readiness.controller";
+import { personalRecoveryController } from "@/modules/personal/recovery.controller";
+import { personalRecruitingController } from "@/modules/personal/recruiting.controller";
+import { personalRegistryController } from "@/modules/personal/registry.controller";
 import { pilotController } from "@/modules/pilot/pilot.controller";
 import { pilotAgendaController } from "@/modules/pilot/pilot-agenda.controller";
 import { pilotClaimsController } from "@/modules/pilot/pilot-claims.controller";
@@ -49,6 +63,11 @@ import { workspaceController } from "@/modules/workspace/workspace.controller";
 import { httpErrorResponses } from "@/types/response";
 
 const app = new Elysia()
+  .onRequest(({ request }) => {
+    if (env.PERSONAL_MODE && isPrivateOnlyRoute(new URL(request.url).pathname)) {
+      return new Response("Not found", { status: 404 });
+    }
+  })
   .use(errorMiddleware)
   .use(corsPlugin)
   .use(swaggerPlugin)
@@ -66,6 +85,19 @@ const app = new Elysia()
       .use(securityController)
       .use(authProvidersController)
       .use(healthController)
+      .use(personalRegistryController)
+      .use(personalApplicationEmailController)
+      .use(personalHostedTransportController)
+      .use(personalController)
+      .use(personalRecruitingController)
+      .use(personalAttemptController)
+      .use(personalAttachmentsController)
+      .use(personalCampaignController)
+      .use(personalChallengeController)
+      .use(personalChallengeVerificationController)
+      .use(personalHandoffController)
+      .use(personalReadinessController)
+      .use(personalRecoveryController)
       .use(jobBoardController)
       .use(credentialController)
       .use(contactController)
@@ -103,7 +135,7 @@ const app = new Elysia()
       .use(adminBoardController)
       .use(adminJobListingController),
   )
-  .listen(env.PORT);
+  .listen({ port: env.PORT, hostname: env.HOST });
 
 logger.info(`JobPilot API running at http://localhost:${app.server?.port}`);
 if (env.NODE_ENV === "development") {

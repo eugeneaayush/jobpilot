@@ -6,6 +6,7 @@ import type {
 } from "@jobpilot/contracts/campaign";
 import { conflict, findOwned } from "@/common/errors";
 import type { CampaignJobStatus, Job, Prisma, PrismaClient } from "@/generated/prisma/client";
+import { guardLegacyPersonalSubmission } from "@/modules/personal/persistence-policy";
 import { deriveCampaignSummary } from "../campaign.summary";
 import { AlreadyAppliedError, skipIfAlreadyApplied } from "./applied-guard";
 import { isTerminalJob } from "./job-result";
@@ -113,6 +114,7 @@ export async function writeJobPatch(
   key: string,
   patch: PatchCampaignJobInput,
 ): Promise<JobPatchResult> {
+  if (patch.status === "applying") guardLegacyPersonalSubmission();
   const existing = await findJob(prisma, userId, campaignId, key);
   if (isTerminalJob(existing.status)) {
     throw conflict("Terminal jobs cannot be edited; use the retry or rescan command.");

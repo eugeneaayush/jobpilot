@@ -3,8 +3,17 @@
   "tags": ["-knipignore"],
   "workspaces": {
     ".": {
-      "entry": [],
-      "project": [],
+      "entry": [
+        "scripts/personal/{cli,pilot,account,recruiting}.ts",
+        "plugin/scripts/personal-browser.ts",
+        "playwright.personal.config.ts",
+        "tests/personal-ui/**/*.spec.ts"
+      ],
+      "project": [
+        "scripts/personal/**/*.ts",
+        "plugin/scripts/**/*.ts",
+        "tests/personal-ui/**/*.ts"
+      ],
       // GitHub-hosted runners ship jq; the release workflow just calls it.
       "ignoreBinaries": ["jq"]
     },
@@ -17,9 +26,10 @@
       "prisma": false,
       // pg is reached through @prisma/adapter-pg, pino-pretty by transport name only,
       // @prisma/client only from the gitignored generated client knip cannot read.
-      "ignoreDependencies": ["pg", "pino-pretty", "@types/pg", "@prisma/client"]
+      "ignoreDependencies": ["pino-pretty", "@prisma/client"]
     },
     "apps/web": {
+      "entry": ["src/components/features/personal/harness-entry.tsx"],
       "project": ["src/**/*.{ts,tsx,mdx}"],
       "includeEntryExports": true,
       "ignoreExportsUsedInFile": false,

@@ -7,6 +7,12 @@ import { z } from "zod/v4";
 const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   PORT: z.coerce.number().default(4101),
+  HOST: z.string().default("0.0.0.0"),
+  PERSONAL_MODE: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
+  JOBPILOT_PERSONAL_ROOT: z.string().optional(),
 
   DATABASE_URL: z.string().min(1),
 
@@ -73,6 +79,9 @@ function validateEnv(): Env {
       .map((issue) => `  ${issue.path.join(".")}: ${issue.message}`)
       .join("\n");
     throw new Error(`Environment validation failed:\n${messages}`);
+  }
+  if (parsed.data.PERSONAL_MODE && !["localhost", "127.0.0.1", "::1"].includes(parsed.data.HOST)) {
+    throw new Error("Personal mode requires a loopback HOST");
   }
   return parsed.data;
 }

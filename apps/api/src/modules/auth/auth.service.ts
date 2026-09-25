@@ -8,7 +8,7 @@ import {
   signAccessToken,
   verifyPassword,
 } from "@/common/auth";
-import { conflict, notFound, unauthorized } from "@/common/errors";
+import { conflict, forbidden, notFound, unauthorized } from "@/common/errors";
 import { normalizeEmail } from "@/common/utils/email";
 import { randomUsername } from "@/common/utils/username";
 import { env } from "@/env";
@@ -42,6 +42,7 @@ export class AuthService {
   }
 
   async register(input: RegisterInput) {
+    if (env.PERSONAL_MODE) throw forbidden("Private account creation is managed by personal:setup");
     // Dev signups skip the verification round-trip; elsewhere the controller emails the link.
     const user = await this.createUserAccount({
       email: input.email,
@@ -57,6 +58,7 @@ export class AuthService {
     passwordHash: string | null;
     emailVerified: boolean;
   }): Promise<User> {
+    if (env.PERSONAL_MODE) throw forbidden("Private account creation is managed by personal:setup");
     const email = normalizeEmail(input.email);
     const existing = await this.prisma.user.findUnique({ where: { email } });
     if (existing) {

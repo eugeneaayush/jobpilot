@@ -92,8 +92,7 @@ describe("skipIfAlreadyApplied", () => {
     expect(refusal?.message).toMatch(/Already applied \(url\)/);
   });
 
-  // Postings get reposted; without a cutoff the same url 409s forever, with no override.
-  it("lets the same url through once it falls out of the window", async () => {
+  it("blocks the same canonical url permanently outside the fuzzy window", async () => {
     const { tx, writes } = transaction([
       { ...EXISTING, appliedAt: new Date(Date.now() - 200 * DAY_MS), title: "x", company: "y" },
     ]);
@@ -105,8 +104,8 @@ describe("skipIfAlreadyApplied", () => {
       company: "Acme",
     });
 
-    expect(refusal).toBeNull();
-    expect(writes).toHaveLength(0);
+    expect(refusal?.message).toMatch(/Already applied \(url\)/);
+    expect(writes).toHaveLength(1);
   });
 
   // The skip commits with the caller's transaction, so the job cannot be left `approved`.

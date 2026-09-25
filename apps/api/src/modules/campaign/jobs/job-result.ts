@@ -3,6 +3,7 @@ import { CAMPAIGN_JOB_TERMINAL_OUTCOMES } from "@jobpilot/contracts/campaign";
 import { conflict, findOwned } from "@/common/errors";
 import type { Application, PrismaClient } from "@/generated/prisma/client";
 import { canonicalizeJobUrl } from "@/modules/application/job-url";
+import { guardLegacyPersonalSubmission } from "@/modules/personal/persistence-policy";
 import { deriveCampaignSummary } from "../campaign.summary";
 
 /** Returns whether a job status is terminal. */
@@ -59,6 +60,7 @@ export async function writeJobResult(
   key: string,
   data: CampaignJobResultInput,
 ) {
+  if (data.outcome === "applied") guardLegacyPersonalSubmission();
   const existing = await findOwned(
     (where) => prisma.job.findFirst({ where, include: { campaign: true } }),
     { campaignId, key, campaign: { userId } },

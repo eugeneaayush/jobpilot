@@ -17,6 +17,7 @@ import {
   PrismaClient,
 } from "@/generated/prisma/client";
 import { JobListingPublisher } from "@/modules/job-listing";
+import { guardLegacyPersonalSubmission } from "@/modules/personal/persistence-policy";
 import { deriveCampaignSummary } from "../campaign.summary";
 import { ensureCampaignOwned } from "../campaign.utils";
 import { AlreadyAppliedError, type GuardTransaction, skipIfAlreadyApplied } from "./applied-guard";
@@ -108,6 +109,7 @@ export class CampaignJobService {
     campaignId: string,
     key: string,
   ): Promise<Job | AlreadyAppliedError> {
+    guardLegacyPersonalSubmission();
     const where = {
       campaignId,
       key,

@@ -7,6 +7,12 @@
     "packages/*"
   ],
   "scripts": {
+    "personal:doctor": "bun scripts/personal/cli.ts doctor",
+    "personal:recruiting": "bun scripts/personal/recruiting.ts",
+    "personal:setup": "bun scripts/personal/cli.ts setup",
+    "personal:dev": "bun scripts/personal/cli.ts dev",
+    "personal:preview": "bun scripts/personal/cli.ts preview",
+    "personal:typecheck": "bun --cwd=apps/api run typecheck --project ../../scripts/personal/tsconfig.json",
     "dev": "concurrently -k -n terminal,api,web -c cyan,magenta,green \"dotnet run --project apps/terminal\" \"bun --cwd=apps/api run dev\" \"bun --cwd=apps/web run dev\"",
     "dev:api": "bun --cwd=apps/api run dev",
     "dev:web": "bun --cwd=apps/web run dev",
@@ -21,10 +27,19 @@
     "format": "biome format --write .",
     "lint": "biome lint .",
     "ci": "biome ci --error-on-warnings .",
-    "knip": "knip"
+    "knip": "knip",
+    "personal:reassess": "bun scripts/personal/cli.ts reassess",
+    "personal:discover": "bun scripts/personal/cli.ts discover",
+    "personal:search": "bun scripts/personal/cli.ts search",
+    "personal:tailor": "bun scripts/personal/cli.ts tailor",
+    "personal:tailor-review": "bun scripts/personal/cli.ts tailor-review",
+    "personal:registry": "bun scripts/personal/cli.ts registry",
+    "personal:digest": "bun scripts/personal/cli.ts digest"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.3",
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "@playwright/test": "1.63.0",
     "@types/bun": "^1.3.14",
     "concurrently": "^10.0.3",
     "knip": "^6.34.0"

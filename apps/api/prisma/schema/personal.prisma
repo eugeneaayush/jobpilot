@@ -1,0 +1,167 @@
+enum PersonalTrack {
+  mba_internship
+  post_mba_fulltime
+  general_professional
+  @@map("personal_track")
+}
+enum PersonalRecordState {
+  discovered
+  eligible
+  prepared
+  applying
+  submitted
+  blocked
+  failed
+  submission_uncertain
+  @@map("personal_record_state")
+}
+enum PersonalDiscoveryStatus {
+  complete
+  partial
+  failed
+  blocked
+  @@map("personal_discovery_status")
+}
+enum PersonalAttemptMode {
+  offline
+  live_preview
+  submit
+  @@map("personal_attempt_mode")
+}
+enum PersonalAttemptState {
+  previewed
+  preparing
+  prepared
+  submitting
+  submitted
+  blocked
+  failed
+  submission_uncertain
+  cancelled
+  @@map("personal_attempt_state")
+}
+model PersonalRecord {
+  id String @id @default(uuid())
+  userId String @map("user_id")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaignId String? @map("campaign_id")
+  jobId String? @map("job_id")
+  identity String
+  title String
+  company String
+  url String
+  requisitionId String? @map("requisition_id")
+  track PersonalTrack
+  state PersonalRecordState @default(discovered)
+  details Json @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  attempts PersonalAttempt[]
+  @@unique([userId, identity])
+  @@index([userId, createdAt])
+  @@map("personal_records")
+}
+model PersonalDiscoveryRun {
+  id String @id @default(uuid())
+  userId String @map("user_id")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  source String
+  status PersonalDiscoveryStatus
+  details Json @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+  @@index([userId, createdAt])
+  @@map("personal_discovery_runs")
+}
+model PersonalResumeEvidence {
+  id String @id @default(uuid())
+  userId String @map("user_id")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resumeId String @map("resume_id")
+  sourceHash String @map("source_hash")
+  details Json @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+  @@index([userId, resumeId])
+  @@map("personal_resume_evidence")
+}
+model PersonalAttempt {
+  id String @id @default(uuid())
+  recordId String @map("record_id")
+  record PersonalRecord @relation(fields: [recordId], references: [id], onDelete: Restrict)
+  userId String @map("user_id")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Historical identifier: deleting a campaign must never erase a submission ledger.
+  campaignId String @map("campaign_id")
+  mode PersonalAttemptMode
+  state PersonalAttemptState @default(preparing)
+  manifest Json
+  manifestHash String @map("manifest_hash")
+  leaseOwner String @map("lease_owner")
+  leaseGeneration Int @default(1) @map("lease_generation")
+  leaseExpiresAt DateTime @map("lease_expires_at")
+  startedAt DateTime @default(now()) @map("started_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  submitAt DateTime? @map("submit_at")
+  receipt Json?
+  attemptNo Int @map("attempt_no")
+  policyDay String @map("policy_day")
+  reservation PersonalReservation?
+  @@unique([recordId, attemptNo])
+  @@index([userId, policyDay, state])
+  @@index([userId, campaignId, state])
+  @@map("personal_attempts")
+}
+model PersonalReservation {
+  id String @id @default(uuid())
+  userId String @map("user_id")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  identity String
+  url String
+  attemptId String @unique @map("attempt_id")
+  attempt PersonalAttempt @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now()) @map("created_at")
+  @@unique([userId, identity])
+  @@unique([userId, url])
+  @@map("personal_reservations")
+}
+
+model PersonalPolicy {
+  userId String @id @map("user_id")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dailyCap Int @default(50) @map("daily_cap")
+  employerActiveCap Int @default(3) @map("employer_active_cap")
+  timezone String @default("America/New_York")
+  monthlyBudgetCents Int @default(20000) @map("monthly_budget_cents")
+  searchBudgetCents Int @default(5000) @map("search_budget_cents")
+  version String @default("graduate-experienced-v1")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@map("personal_policies")
+}
+
+model PersonalSource {
+  id String @id @default(uuid())
+  userId String @map("user_id")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  identity String
+  configuration Json
+  attemptedAt DateTime? @map("attempted_at")
+  completedAt DateTime? @map("completed_at")
+  nextEligibleAt DateTime? @map("next_eligible_at")
+  status PersonalDiscoveryStatus?
+  coverage Json @default("{}")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@unique([userId, identity])
+  @@map("personal_sources")
+}
+
+model PersonalEmployerAlias {
+  id String @id @default(uuid())
+  userId String @map("user_id")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceEmployer String @map("source_employer")
+  canonicalEmployer String @map("canonical_employer")
+  evidence Json
+  createdAt DateTime @default(now()) @map("created_at")
+  @@unique([userId, sourceEmployer])
+  @@index([userId, canonicalEmployer])
+  @@map("personal_employer_aliases")
+}

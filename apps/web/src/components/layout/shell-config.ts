@@ -10,6 +10,7 @@ import {
   Insights,
   Lightbulb,
   Public,
+  School,
   Settings,
   SmartToy,
   type SvgIconComponent,
@@ -44,6 +45,7 @@ const navGroups: NavGroup[] = [
       { label: "Pilot", href: "/pilot", icon: SmartToy, badge: "questions", primary: true },
       { label: "Inbox", href: "/inbox", icon: Inbox, primary: true },
       { label: "Analytics", href: "/analytics", icon: Insights, primary: true },
+      { label: "Personal", href: "/personal", icon: School },
     ],
   },
   {

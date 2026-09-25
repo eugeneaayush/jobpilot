@@ -1,5 +1,10 @@
 # Eligibility - what is (and isn't) a skip
 
+In private personal campaigns, the API's graduate/experienced policy takes precedence over
+this general guide. Exclude undergraduate entry-level roles, hold unresolved seniority and
+mixed student programs without affirmative graduate-level evidence, and use fit only to
+order otherwise eligible roles. Never override a held application with a legacy result write.
+
 **Valid skip reasons (exact phrasing):**
 
 - `Already applied (<kind>)` - dedupe.

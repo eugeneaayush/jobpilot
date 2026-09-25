@@ -101,5 +101,14 @@ model User {
   pushSubscriptions  PushSubscription[]
   promotionPosts     PromotionPost[]
 
+  personalRecords PersonalRecord[]
+  personalDiscoveryRuns PersonalDiscoveryRun[]
+  personalResumeEvidence PersonalResumeEvidence[]
+  personalAttempts PersonalAttempt[]
+  personalReservations PersonalReservation[]
+  personalPolicy PersonalPolicy?
+  personalSources PersonalSource[]
+  personalEmployerAliases PersonalEmployerAlias[]
+
   @@map("users")
 }

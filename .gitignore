@@ -36,4 +36,13 @@ dist/
 
 .env
 
+# Personal inputs and runtime outputs never belong in source control.
+/resume/
+/test-results/
+/playwright-report/
+.env.local
+.env.*.local
+storage/
+.superpowers/
+
 __pycache__/

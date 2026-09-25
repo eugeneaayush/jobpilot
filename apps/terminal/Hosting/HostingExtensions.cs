@@ -5,6 +5,7 @@ using JobPilot.Terminal.Pty;
 using JobPilot.Terminal.Realtime;
 using JobPilot.Terminal.Sessions;
 using JobPilot.Terminal.Updates;
+using JobPilot.Terminal.Workers;
 using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
@@ -24,6 +25,7 @@ public static class HostingExtensions
                 .AllowAnyHeader()
                 .AllowAnyMethod()));
         services.AddSingleton<HostInstall>();
+        services.AddStructuredWorkers();
         services.AddSingleton<ProtocolRegistrar>();
         services.AddSingleton<GitHubReleaseClient>();
         services.AddSingleton<ReleaseInstaller>();
@@ -49,7 +51,7 @@ public static class HostingExtensions
         services.Configure<RouteHandlerOptions>(o => o.ThrowOnBadRequest = true);
 
         // Must stay below HostHandoff.MaxWait or an update's relaunched child times out and fails to bind.
-        services.Configure<HostOptions>(o => o.ShutdownTimeout = TimeSpan.FromSeconds(5));
+        services.Configure<HostOptions>(o => o.ShutdownTimeout = TimeSpan.FromSeconds(12));
 
         return services;
     }

@@ -90,6 +90,18 @@ export const RATE_LIMITS = {
   /** Full-history NDJSON export - heavy (streams every row), user-initiated, rarely needed. */
   pilotJournalExport: { key: byUser, limit: 10, windowMs: HOUR },
 
+  /** Per-field lease checks and 15-second heartbeats; burst covers a 100-field form's checks. */
+  personalAttemptControl: { key: byUser, limit: 3600, windowMs: HOUR, burst: 240 },
+
+  /** Paginated campaign reads must not consume launch or emergency stop capacity. */
+  personalCampaignRead: { key: byUser, limit: 600, windowMs: HOUR, burst: 30 },
+
+  /** Several campaigns can be checked together; idle clients back off between rounds. */
+  personalCampaignSchedule: { key: byUser, limit: 240, windowMs: HOUR, burst: 20 },
+
+  /** Dedicated user stop capacity, independent of polling and scheduler activity. */
+  personalCampaignStop: { key: byUser, limit: 120, windowMs: HOUR, burst: 10 },
+
   /** Claim/heartbeat/release bookkeeping, a few per worked item. */
   pilotClaim: { key: byUser, limit: 240, windowMs: HOUR, burst: 10 },
 

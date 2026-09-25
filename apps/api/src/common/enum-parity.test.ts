@@ -21,6 +21,17 @@ import {
   NETWORKING_CHANNELS,
   NETWORKING_MESSAGE_STATUSES,
 } from "@jobpilot/contracts/networking";
+import {
+  PERSONAL_ATTEMPT_MODES,
+  PERSONAL_ATTEMPT_STATES,
+  PERSONAL_DISCOVERY_STATUSES,
+  PERSONAL_RECORD_STATES,
+  PERSONAL_TRACKS,
+} from "@jobpilot/contracts/personal-attempt";
+import {
+  PERSONAL_SPEND_CATEGORIES,
+  PERSONAL_SPEND_STATUSES,
+} from "@jobpilot/contracts/personal-search";
 import { PILOT_CLAIM_OUTCOMES } from "@jobpilot/contracts/pilot/claim";
 import { PILOT_JOURNAL_KINDS } from "@jobpilot/contracts/pilot/journal";
 import { PROMOTION_STATUSES } from "@jobpilot/contracts/pilot/promotion";
@@ -41,6 +52,13 @@ import { describe, expect, it } from "bun:test";
 // The web cannot import the generated Prisma client, so `@jobpilot/contracts` keeps its own copy of
 // every DB enum's values. This is the only thing stopping the two from drifting.
 const PAIRS: [string, readonly string[], Record<string, string>][] = [
+  ["PersonalSpendCategory", PERSONAL_SPEND_CATEGORIES, prismaEnums.PersonalSpendCategory],
+  ["PersonalSpendStatus", PERSONAL_SPEND_STATUSES, prismaEnums.PersonalSpendStatus],
+  ["PersonalTrack", PERSONAL_TRACKS, prismaEnums.PersonalTrack],
+  ["PersonalRecordState", PERSONAL_RECORD_STATES, prismaEnums.PersonalRecordState],
+  ["PersonalDiscoveryStatus", PERSONAL_DISCOVERY_STATUSES, prismaEnums.PersonalDiscoveryStatus],
+  ["PersonalAttemptMode", PERSONAL_ATTEMPT_MODES, prismaEnums.PersonalAttemptMode],
+  ["PersonalAttemptState", PERSONAL_ATTEMPT_STATES, prismaEnums.PersonalAttemptState],
   ["ApplicationStatus", APPLICATION_STATUSES, prismaEnums.ApplicationStatus],
   ["ApplicationSource", APPLICATION_SOURCES, prismaEnums.ApplicationSource],
   ["ApplicationEventKind", APPLICATION_EVENT_KINDS, prismaEnums.ApplicationEventKind],

@@ -196,7 +196,7 @@ export class CampaignService {
           select: { contactId: true },
         })
       ).map((message) => message.contactId);
-      await tx.application.deleteMany({ where: { campaignId: id, userId } });
+      // The campaign FK uses SetNull; application history survives campaign removal.
       await tx.networkingMessage.deleteMany({ where: { campaignId: id, userId } });
       await tx.contact.deleteMany({
         where: { id: { in: contactIds }, userId, messages: { none: {} }, relatedAppId: null },
