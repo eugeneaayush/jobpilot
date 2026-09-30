@@ -3,8 +3,10 @@
 Executed September 30, 2026. This report records current checks, not historical test counts.
 This report accompanies the committed core milestone 0–10 implementation on
 `codex/integrate-private-workflow`, based on
-`2155f5266b71b16f3b18460f35a31b44efd68508`. No push, PR,
-deployment or private campaign relaunch was performed.
+`2155f5266b71b16f3b18460f35a31b44efd68508`. No deployment or private campaign relaunch
+was performed. The implementation is published in [PR #1](https://github.com/eugeneaayush/jobpilot/pull/1).
+Post-publication preparation and read-only source probes are recorded separately in
+[PRIVATE_ROLLOUT.md](PRIVATE_ROLLOUT.md) and [SOURCE_VALIDATION.md](SOURCE_VALIDATION.md).
 
 ## Environment and baseline
 
@@ -100,8 +102,9 @@ endpoints are local fixtures; no real employer submission occurred.
 ## Limits and later actions
 
 Optional boards and feeds remain disabled by default. LinkedIn/Indeed/Google parsers were
-tested with synthetic responses; live board access, availability and changing HTML were not
-validated. Glassdoor and ZipRecruiter remain unavailable. Feed ingestion accepts bounded
+tested with synthetic responses in the local gate; later bounded live-access probes are
+recorded in SOURCE_VALIDATION.md and do not establish continuing availability or full portal
+support. Glassdoor and ZipRecruiter remain unavailable. Feed ingestion accepts bounded
 supplied snapshots and does not redistribute datasets or assume graduate eligibility.
 
 Browser results establish synthetic boundary behavior, not approval for a real provider or
@@ -113,11 +116,11 @@ live model's review quality or universal factual/ATS correctness.
 
 Windows compilation passed, but Windows runtime process-tree cancellation was not exercised
 on this macOS host. Native AOT/package execution was built for macOS arm64. CI was updated
-with frozen Python/Poppler and disposable PostgreSQL/browser checks; GitHub Actions itself
-was not dispatched in this session.
+with frozen Python/Poppler and disposable PostgreSQL/browser checks. The local results above
+precede publication; the PR checks report the separate GitHub Actions results.
 
 The private setup/doctor paths that inspect a real account, private deployment migration,
-campaign relaunch, source enablement, PR publication and live-provider verification
+campaign relaunch, source enablement and live-provider verification
 remain later actions. [SETUP.md](SETUP.md) documents installation, reapproval and rollback.
 Rollback must stop private live execution and preserve approvals, attempts and reservations.
 Stagehand remains deferred, with no production dependency or activation.

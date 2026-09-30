@@ -7,6 +7,14 @@ Baseline: `2155f5266b71b16f3b18460f35a31b44efd68508` in
 implemented behavior, not a deployment or release. Executed checks, counts and
 remaining validation limits belong in [VALIDATION.md](VALIDATION.md).
 
+The implementation is published in [PR #1](https://github.com/eugeneaayush/jobpilot/pull/1).
+Follow-up preparation adds [PRIVATE_ROLLOUT.md](PRIVATE_ROLLOUT.md) with installation,
+migration preservation and exact reapproval checks, without applying a private migration.
+[SOURCE_VALIDATION.md](SOURCE_VALIDATION.md) records one ordinary-HTTP probe per board:
+five unresolved LinkedIn leads, blocked Indeed/Google outcomes and unchanged source
+defaults. Audited feed READMEs parse within bounds; whole JSON snapshots exceed the
+current limits and require bounded private subsets.
+
 - Added dashboard-only exact application review, expiring single-attempt approval,
   withdrawal, and approval checks before live filling, uploading and submission.
   The data migration pauses existing live private campaigns and clears their launch

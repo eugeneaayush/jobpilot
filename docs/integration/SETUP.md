@@ -1,5 +1,9 @@
 # Private integration setup and operations
 
+Use [PRIVATE_ROLLOUT.md](PRIVATE_ROLLOUT.md) for the ordered deployment, migration,
+preservation and reapproval checks. [SOURCE_VALIDATION.md](SOURCE_VALIDATION.md) records
+the bounded read-only optional-source probes; a probe does not enable a source.
+
 Use Bun and the existing private API/terminal/database setup. Add `uv`, Python 3.12
 (uv can manage it), and Poppler (`pdftotext`, `pdftoppm`) to the local API machine.
 The isolated package uses a frozen lockfile:
