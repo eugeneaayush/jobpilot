@@ -11,7 +11,11 @@ import {
   verifyAttachmentManifest,
 } from "./attachments-policy";
 import { generateDraftPdf } from "./document";
+import { buildFitEvaluation, campaignKeywords } from "./fit-evaluation";
 import { resumePageLimit, seniorityParkReason } from "./graduate-policy";
+import { verifyDocumentForUser } from "./local-tools/document-check";
+import { documentPipelineMatches } from "./local-tools/pipeline-config";
+import { verifyRendererMapping } from "./local-tools/renderer-mapping";
 import {
   manifestHash as canonicalHash,
   privateArtifactRoot,
@@ -31,12 +35,62 @@ export class PersonalPreviewService {
     private readonly personal: PersonalService,
   ) {}
 
+  async verifyDocument(userId: string, recordId: string, signal?: AbortSignal) {
+    const record = await this.prisma.personalRecord.findFirst({ where: { id: recordId, userId } });
+    if (!record) throw notFound("Record not found");
+    const details = objectValue(record.details);
+    const preview = objectValue(details.preview);
+    const document = objectValue(details.document);
+    const renderer = document.template;
+    if (
+      (renderer !== "cbs-letter-times" && renderer !== "rendercv-classic") ||
+      !documentPipelineMatches(document, renderer)
+    )
+      throw conflict("Document renderer configuration changed; regenerate before review");
+    await verifyRendererMapping(document, privateArtifactRoot(userId));
+    const contact = objectValue(objectValue(document.data).basics);
+    if (typeof contact.name !== "string" || !contact.name.trim())
+      throw conflict("Accepted document contact evidence is missing");
+    const bytes = new Uint8Array(await (await this.personal.pdf(userId, recordId)).arrayBuffer());
+    if (sha256(bytes) !== preview.pdfHash) throw conflict("PDF changed before verification");
+    const report = await verifyDocumentForUser(userId, bytes, {
+      requiredText: [contact.name, contact.email, contact.phone].filter(
+        (value): value is string => typeof value === "string" && !!value,
+      ),
+      supportedTerms: stringsValue(objectValue(details.fitEvaluation).supportedInDraft),
+      maxPages: resumePageLimit(record),
+      renderer,
+      signal,
+    });
+    const changed = await this.prisma.personalRecord.updateMany({
+      where: {
+        id: recordId,
+        userId,
+        updatedAt: record.updatedAt,
+        state: { notIn: ["applying", "submitted", "submission_uncertain"] },
+      },
+      data: {
+        details: jsonValue({
+          ...details,
+          documentVerification: report,
+          ...(report.status !== "passed"
+            ? { preview: { ...preview, renderReviewed: false, readiness: "draft" } }
+            : {}),
+        }),
+      },
+    });
+    if (changed.count !== 1) throw conflict("Record changed during document verification");
+    if (report.status !== "passed")
+      throw conflict("Document checks did not pass; inspect document verification and local tools");
+    return report;
+  }
+
   async review(
     userId: string,
     recordId: string,
     input: { pdfHash: string; inspected: true; notes: string },
   ) {
-    await this.personal.pdf(userId, recordId);
+    const documentVerification = await this.verifyDocument(userId, recordId);
     const record = await this.prisma.personalRecord.findFirst({ where: { id: recordId, userId } });
     if (!record) throw notFound("Record not found");
     const details = objectValue(record.details);
@@ -67,16 +121,23 @@ export class PersonalPreviewService {
         details: jsonValue({
           ...details,
           renderReview,
+          documentVerification,
           preview: {
             ...preview,
-            renderReviewed: true,
+            renderReviewed: documentVerification.status === "passed",
             readiness:
-              stringsValue(preview.conflicts).length === 0 && attachmentsReady ? "ready" : "draft",
+              stringsValue(preview.conflicts).length === 0 &&
+              attachmentsReady &&
+              documentVerification.status === "passed"
+                ? "ready"
+                : "draft",
           },
         }),
       },
     });
     if (changed.count !== 1) throw conflict("Record changed during render review");
+    if (documentVerification.status !== "passed")
+      throw conflict("Document checks did not pass; inspect document verification and local tools");
     return this.personal.record(userId, recordId);
   }
 
@@ -130,7 +191,7 @@ export class PersonalPreviewService {
     });
   }
 
-  async preview(userId: string, recordId: string) {
+  async preview(userId: string, recordId: string, signal?: AbortSignal) {
     const record = await this.prisma.personalRecord.findFirst({ where: { id: recordId, userId } });
     if (!record) throw notFound("Record not found");
     if (["applying", "submitted", "submission_uncertain"].includes(record.state))
@@ -177,23 +238,57 @@ export class PersonalPreviewService {
         review: savedTailoring.review,
       } as ReviewedProposal;
     }
+    const settings = await this.personal.settings(userId);
     const document = await generateDraftPdf(data, path.join(personalRoot(), "storage", userId), {
+      renderer: settings.resumeRenderer ?? "cbs-letter-times",
+      userId,
       jobKeywords: `${record.title} ${String(posting.descriptionText ?? "")}`
         .split(/\W+/)
         .filter((word) => word.length > 3),
       reviewedProposal,
-      requestedMode: reviewedProposal ? "rewrite" : "extractive",
+      requestedMode:
+        reviewedProposal && reviewedProposal.proposal.rewrites.length > 0
+          ? "rewrite"
+          : "extractive",
+      documentEdits: details.documentEdits,
       maxPages,
       conflicts,
       sourceDigest: evidence.sourceHash,
+      signal,
     });
+    const fitEvaluation = buildFitEvaluation(
+      {
+        title: record.title,
+        employer: record.company,
+        descriptionText: String(posting.descriptionText ?? ""),
+        location: typeof posting.location === "string" ? posting.location : null,
+        deadline: typeof posting.deadline === "string" ? posting.deadline : null,
+      },
+      {
+        keywords: campaignKeywords(data, settings),
+        preferredLocations: settings.locations,
+        restrictedEmployers: settings.exclusions,
+        ...(settings.minimumCompensation !== null &&
+        settings.compensationCurrency &&
+        settings.compensationPeriod
+          ? {
+              minimumCompensation: {
+                amount: settings.minimumCompensation,
+                currency: settings.compensationCurrency,
+                period: settings.compensationPeriod,
+              },
+            }
+          : {}),
+      },
+      data,
+      document.data,
+    );
     conflicts.push(
       ...document.conflicts.filter(
         (value): value is string => typeof value === "string" && !conflicts.includes(value),
       ),
     );
     if (document.pageLimitExceeded) conflicts.push(`Resume exceeds its ${maxPages}-page limit`);
-    const settings = await this.personal.settings(userId);
     const screeningSnapshot = validateScreeningSnapshot(record, settings, evidence);
     const manifest = {
       recordId,
@@ -249,6 +344,8 @@ export class PersonalPreviewService {
             ...details,
             preview,
             document,
+            fitEvaluation,
+            documentVerification: null,
             manifestPath,
             attachmentRequirements,
             previewAttachments,

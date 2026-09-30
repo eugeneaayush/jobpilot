@@ -88,9 +88,11 @@ export class HandoffBrowser {
     )
       throw new Error("Invalid handoff scope");
   }
-  private async api(path: string) {
+  private async api(path: string, body?: unknown) {
     const response = await fetch(`${this.config.api.replace(/\/$/, "")}/api/personal${path}`, {
-      headers: { authorization: `Bearer ${this.config.token}` },
+      method: body === undefined ? "GET" : "POST",
+      headers: { authorization: `Bearer ${this.config.token}`, "content-type": "application/json" },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       redirect: "error",
       signal: AbortSignal.timeout(10_000),
     });
@@ -129,6 +131,11 @@ export class HandoffBrowser {
       (this.attempt && this.attempt.manifestHash !== attempt.manifestHash)
     )
       throw new Error("Handoff requisition changed");
+    await this.api(`/attempts/${scope.attemptId}/handoff/authorize`, {
+      handoffId: scope.handoffId,
+      leaseOwner: scope.leaseOwner,
+      leaseGeneration: scope.leaseGeneration,
+    });
     this.scope = scope;
     this.attempt = attempt;
     this.record = record;
@@ -165,12 +172,10 @@ export class HandoffBrowser {
     await this.context.routeWebSocket("**/*", (socket) => socket.close());
     await this.context.route("**/*", async (route) => {
       const request = route.request();
-      if (!["GET", "HEAD", "OPTIONS"].includes(request.method())) {
-        try {
-          await this.authorize();
-        } catch {
-          return route.abort("blockedbyclient");
-        }
+      try {
+        await this.authorize();
+      } catch {
+        return route.abort("blockedbyclient");
       }
       if (
         !handoffRequestAllowed(

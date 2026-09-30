@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { EMPTY_RESUME_DATA } from "@jobpilot/contracts/resume";
 import { type DocumentManifest, freezeDocumentProvenance } from "./document";
+import { documentPipelineInputs } from "./local-tools/pipeline-config";
 import { expect, test } from "bun:test";
 
 async function temporary(work: (directory: string) => Promise<void>) {
@@ -17,6 +18,7 @@ async function temporary(work: (directory: string) => Promise<void>) {
 
 function provenance(directory: string): Omit<DocumentManifest, "manifestPath"> {
   return {
+    ...documentPipelineInputs("cbs-letter-times"),
     path: join(directory, `${"a".repeat(64)}.pdf`),
     sha256: "a".repeat(64),
     bytes: 100,
@@ -25,6 +27,9 @@ function provenance(directory: string): Omit<DocumentManifest, "manifestPath"> {
     conflicts: [],
     renderQa: "required",
     template: "cbs-letter-times",
+    rendererVersion: "4.5.1",
+    rendererConfigHash: "a".repeat(64),
+    verifierVersion: "1",
     generatedAt: "2026-09-16T12:00:00.000Z",
     data: structuredClone(EMPTY_RESUME_DATA),
     tailoringMode: "extractive",

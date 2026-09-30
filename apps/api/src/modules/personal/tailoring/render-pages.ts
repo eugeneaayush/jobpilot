@@ -6,18 +6,26 @@ const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest(
 
 export async function renderReviewPages(
   bytes: Uint8Array,
-  options: { directory: string; pdfHash: string; maxPages: 1 | 2; signal?: AbortSignal },
+  options: {
+    directory: string;
+    pdfHash: string;
+    maxPages: 1 | 2;
+    signal?: AbortSignal;
+    verifiedPageCount?: number;
+  },
 ) {
   if (bytes.length > 16_000_000 || sha256(bytes) !== options.pdfHash)
     throw new Error("Frozen PDF integrity or size check failed");
   const command = Bun.which("pdftoppm");
   const textCommand = Bun.which("pdftotext");
   if (!command || !textCommand) throw new Error("Local Poppler rendering dependencies are missing");
-  const pageCount = [
-    ...Buffer.from(bytes)
-      .toString("latin1")
-      .matchAll(/\/Type\s*\/Page\b/g),
-  ].length;
+  const pageCount =
+    options.verifiedPageCount ??
+    [
+      ...Buffer.from(bytes)
+        .toString("latin1")
+        .matchAll(/\/Type\s*\/Page\b/g),
+    ].length;
   if (pageCount < 1 || pageCount > options.maxPages) throw new Error("PDF exceeds page budget");
   await mkdir(options.directory, { recursive: true, mode: 0o700 });
   await chmod(options.directory, 0o700);

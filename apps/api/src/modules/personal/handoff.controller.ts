@@ -32,6 +32,19 @@ export const personalHandoffController = new Elysia({
     beforeHandle: limit,
   })
   .post(
+    "/:id/handoff/authorize",
+    ({ user, params, body }) => svc.authorize(user.id, params.id, body),
+    {
+      params: idParam,
+      body: personalHandoffLeaseSchema,
+      response: personalHandoffResponseSchema,
+      beforeHandle: limit,
+      detail: {
+        summary: "Authorize authentication transmission for the exact approved application",
+      },
+    },
+  )
+  .post(
     "/:id/handoff/:action",
     ({ user, params, body }) => svc.transition(user.id, params.id, params.action, body),
     {

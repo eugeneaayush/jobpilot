@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { PersonalApprovalService } from "./approval.service";
 import { PersonalHandoffService } from "./handoff.service";
 import { manifestHash } from "./persistence-policy";
 import {
@@ -16,7 +17,7 @@ describe.skipIf(!url)("persistent browser handoff", () => {
   let service: PersonalHandoffService;
   beforeAll(async () => {
     db = await createPersonalTestDatabase(url!);
-    service = new PersonalHandoffService(db.prisma);
+    service = new PersonalHandoffService(db.prisma, db.service);
   });
   afterAll(async () => {
     await db?.dispose();
@@ -50,6 +51,30 @@ describe.skipIf(!url)("persistent browser handoff", () => {
     expect(current.browserOpen).toBe(false);
     await expect(service.transition(f.user.id, f.attempt.id, "resume", current)).rejects.toThrow(
       "receipt",
+    );
+  });
+  test("withdrawal fences authentication while status and cancellation remain available", async () => {
+    const f = await fixture();
+    const opened = await service.transition(f.user.id, f.attempt.id, "open", f.handoff);
+    await service.authorize(f.user.id, f.attempt.id, opened);
+    const approvals = new PersonalApprovalService(db.prisma, db.service);
+    const review = await approvals.get(f.user.id, f.record.id, "session");
+    await approvals.withdraw(f.user.id, review.approval!.id, f.record.id, "session", {
+      expectedRecordVersion: review.recordVersion.toISOString(),
+      packetHash: review.packetHash,
+      nonce: review.nonce,
+      confirm: true,
+    });
+    await expect(service.authorize(f.user.id, f.attempt.id, opened)).rejects.toThrow("withdrawn");
+    await expect(service.transition(f.user.id, f.attempt.id, "heartbeat", opened)).rejects.toThrow(
+      "withdrawn",
+    );
+    await expect(service.transition(f.user.id, f.attempt.id, "resume", opened)).rejects.toThrow(
+      "withdrawn",
+    );
+    expect((await service.get(f.user.id, f.attempt.id)).status).toBe("open");
+    expect((await service.transition(f.user.id, f.attempt.id, "cancel", opened)).status).toBe(
+      "cancelled",
     );
   });
   test("verified session proof closes handoff and retains blocked state for separate recovery", async () => {

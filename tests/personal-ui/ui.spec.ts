@@ -55,8 +55,8 @@ test("settings round-trip: untouched facts stay null, currency stated not inferr
   await settings.getByLabel("Locations").fill("New York, Boston");
   await settings.getByRole("combobox", { name: "Authorized to work" }).click();
   await page.getByRole("option", { name: "Yes", exact: true }).click();
-  await settings.getByLabel("Currency").fill("eur");
-  await settings.getByRole("combobox", { name: "Compensation period" }).click();
+  await settings.getByLabel("Currency", { exact: true }).fill("eur");
+  await settings.getByRole("combobox", { name: "Compensation period", exact: true }).click();
   await page.getByRole("option", { name: "Per year" }).click();
   await settings.getByRole("button", { name: "Save" }).click();
 

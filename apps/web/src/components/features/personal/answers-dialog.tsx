@@ -64,7 +64,33 @@ interface DraftRow {
   label: string;
   fieldName?: string;
   type: string;
+  multiple: boolean;
+  options: Array<{ value: string; label: string }>;
   saved: PersonalScreeningAnswer | null;
+}
+
+function savedValueMatches(row: DraftRow): boolean {
+  if (row.multiple) return Array.isArray(row.saved?.value);
+  if (row.type === "checkbox") return typeof row.saved?.value === "boolean";
+  return typeof row.saved?.value === "string";
+}
+
+function controlValue(row: DraftRow, value: PersonalScreeningAnswer["value"] | undefined) {
+  if (row.multiple) return Array.isArray(value) ? value : [];
+  if (row.type === "checkbox" && typeof value === "boolean") return String(value);
+  return typeof value === "string" ? value : "";
+}
+
+function enteredValue(row: DraftRow, value: string | string[]): PersonalScreeningAnswer["value"] {
+  if (row.multiple) return Array.isArray(value) ? value : [];
+  if (row.type === "checkbox" && value !== "") return value === "true";
+  return value;
+}
+
+function selectionHint(row: DraftRow): string | undefined {
+  if (!row.multiple) return undefined;
+  if (!row.options.length) return "Refresh the application questions to edit this saved selection.";
+  return "Select every applicable option. The complete selection will be verified.";
 }
 
 /** Union of saved snapshot answers and the record's open questions, keyed for the draft. */
@@ -79,18 +105,20 @@ function draftRows(
       label: answer.label ?? answer.fieldName ?? answer.key,
       fieldName: answer.fieldName,
       type: typeof answer.value === "boolean" ? "checkbox" : "text",
+      multiple: Array.isArray(answer.value),
+      options: [],
       saved: answer,
     }),
   );
   const known = new Set(rows.map((row) => row.key));
   for (const question of questions) {
-    const existing = rows.find(
-      (row) =>
-        (question.fieldName && row.fieldName === question.fieldName) ||
-        row.label === question.label,
+    const existing = rows.find((row) =>
+      question.fieldName ? row.fieldName === question.fieldName : row.label === question.label,
     );
     if (existing) {
       existing.type = question.type;
+      existing.multiple = question.multiple === true;
+      existing.options = question.options ?? [];
       existing.fieldName ||= question.fieldName;
       continue;
     }
@@ -101,6 +129,8 @@ function draftRows(
       label: question.label || question.fieldName,
       fieldName: question.fieldName || undefined,
       type: question.type,
+      multiple: question.multiple === true,
+      options: question.options ?? [],
       saved: null,
     });
     known.add(key);
@@ -108,7 +138,7 @@ function draftRows(
   for (const question of missingAnswers) {
     const key = answerKey(question);
     if (!known.has(key) && !rows.some((row) => row.label === question)) {
-      rows.push({ key, label: question, type: "text", saved: null });
+      rows.push({ key, label: question, type: "text", multiple: false, options: [], saved: null });
       known.add(key);
     }
   }
@@ -130,18 +160,13 @@ function DraftForm(props: DraftFormProps): ReactElement {
   const snapshot = data.snapshot;
   const locked = ["applying", "submitted", "submission_uncertain"].includes(record.state);
   const rows = draftRows(snapshot?.answers ?? [], record.missingAnswers, data.questions);
+  const [sources, setSources] = useState<Record<string, PersonalScreeningAnswer["source"]>>(() =>
+    Object.fromEntries((snapshot?.answers ?? []).map((answer) => [answer.key, answer.source])),
+  );
 
   // A changed question type requires a new answer, never a guessed conversion.
-  const [values, setValues] = useState<Record<string, string | boolean>>(() =>
-    Object.fromEntries(
-      rows
-        .filter((row) =>
-          row.type === "checkbox"
-            ? typeof row.saved?.value === "boolean"
-            : typeof row.saved?.value === "string",
-        )
-        .map((row) => [row.key, row.saved!.value]),
-    ),
+  const [values, setValues] = useState<Record<string, PersonalScreeningAnswer["value"]>>(() =>
+    Object.fromEntries(rows.filter(savedValueMatches).map((row) => [row.key, row.saved!.value])),
   );
 
   const save = useApiMutation<PersonalScreeningAnswersResponse, PersonalScreeningAnswer[]>(
@@ -177,7 +202,9 @@ function DraftForm(props: DraftFormProps): ReactElement {
 
   const filled = rows.filter((row) => {
     const value = values[row.key];
-    return typeof value === "boolean" || (typeof value === "string" && value.trim() !== "");
+    return Array.isArray(value)
+      ? value.length > 0
+      : typeof value === "boolean" || (typeof value === "string" && value.trim() !== "");
   });
   const canSave = filled.length > 0 || (snapshot?.answers.length ?? 0) > 0;
 
@@ -187,12 +214,12 @@ function DraftForm(props: DraftFormProps): ReactElement {
       filled.map((row) => ({
         key: row.key,
         value:
-          typeof values[row.key] === "boolean"
+          typeof values[row.key] === "boolean" || Array.isArray(values[row.key])
             ? values[row.key]
             : String(values[row.key] ?? "").trim(),
         ...(row.fieldName ? { fieldName: row.fieldName } : {}),
         label: row.label,
-        source: { kind: "explicit_user", confirmed: true },
+        source: sources[row.key] ?? { kind: "explicit_user", confirmed: true },
       })),
     );
   };
@@ -270,42 +297,77 @@ function DraftForm(props: DraftFormProps): ReactElement {
           <Stack key={row.key} spacing={0.5}>
             <TextField
               label={row.label}
-              select={row.type === "checkbox"}
-              value={
-                row.type === "checkbox" && typeof values[row.key] === "boolean"
-                  ? String(values[row.key])
-                  : (values[row.key] ?? "")
-              }
+              select={row.multiple || row.type === "checkbox"}
+              slotProps={row.multiple ? { select: { multiple: true } } : undefined}
+              value={controlValue(row, values[row.key])}
               onChange={(e) => {
-                const value =
-                  row.type === "checkbox" && e.target.value !== ""
-                    ? e.target.value === "true"
-                    : e.target.value;
+                const value = enteredValue(row, e.target.value);
                 setValues((prev) => ({ ...prev, [row.key]: value }));
+                setSources((prev) => ({
+                  ...prev,
+                  [row.key]: { kind: "explicit_user", confirmed: true },
+                }));
                 setConfirmed(false);
               }}
-              disabled={locked || stale || save.isPending}
+              disabled={locked || stale || save.isPending || (row.multiple && !row.options.length)}
+              helperText={selectionHint(row)}
               fullWidth
             >
-              {row.type === "checkbox" && [
-                <MenuItem key="unset" value="">
-                  Not answered
-                </MenuItem>,
-                <MenuItem key="true" value="true">
-                  Yes / checked
-                </MenuItem>,
-                <MenuItem key="false" value="false">
-                  No / unchecked
-                </MenuItem>,
-              ]}
+              {row.multiple &&
+                row.options.map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              {!row.multiple &&
+                row.type === "checkbox" && [
+                  <MenuItem key="unset" value="">
+                    Not answered
+                  </MenuItem>,
+                  <MenuItem key="true" value="true">
+                    Yes / checked
+                  </MenuItem>,
+                  <MenuItem key="false" value="false">
+                    No / unchecked
+                  </MenuItem>,
+                ]}
             </TextField>
             <Typography variant="captionMuted">key: {row.key}</Typography>
+            {data.suggestions
+              ?.filter((suggestion) => suggestion.fieldName === row.fieldName)
+              .map((suggestion) => (
+                <Stack key={suggestion.fieldName} spacing={0.5}>
+                  <Typography variant="captionMuted">
+                    {suggestion.reason}
+                    {suggestion.answer ? ` Suggested: ${String(suggestion.answer.value)}` : ""}
+                  </Typography>
+                  {suggestion.answer && (
+                    <Button
+                      sx={{ alignSelf: "flex-start" }}
+                      disabled={locked || stale || save.isPending}
+                      onClick={() => {
+                        setValues((previous) => ({
+                          ...previous,
+                          [row.key]: suggestion.answer!.value,
+                        }));
+                        setSources((previous) => ({
+                          ...previous,
+                          [row.key]: suggestion.answer!.source,
+                        }));
+                        setConfirmed(false);
+                      }}
+                    >
+                      Use sourced suggestion
+                    </Button>
+                  )}
+                </Stack>
+              ))}
           </Stack>
         ))}
         <Alert severity="info">
           Nothing is autofilled. Values start from your own saved answers only, and every saved
-          answer is recorded as explicitly confirmed by you. Saving replaces this snapshot; clearing
-          a field removes its saved answer.
+          answer retains its selected source or is recorded as explicitly confirmed by you. Saving
+          replaces this snapshot; clearing a field removes its saved answer.
         </Alert>
         <FormControlLabel
           control={

@@ -90,3 +90,14 @@ The agent launches and signs in from the dashboard - never from this session:
 ## What JobPilot does
 
 Searches job boards, tailors your resume per posting, and applies on your behalf - running on your own Claude/Codex subscription via the local agent. Your data lives in your JobPilot account on the web; the agent talks to it for you.
+
+## Optional private checkout tools
+
+Apply this only to an already configured private `/personal` checkout. Read its
+`docs/integration/SETUP.md`. From that checkout, run `bun run personal:tools:setup`
+to install the frozen Python 3.12 package and probe capabilities; install Poppler on
+the API machine for PDF checks. Use `bun run personal:doctor` for runtime diagnostics.
+Do not run full `personal:setup` merely to install tools: it also performs database
+and terminal setup. Keep optional lead sources off until configured. Private
+application approval is granted in the dashboard for exact answers and documents;
+agent bearer tokens cannot grant it. This bootstrap installs no browser fallback.

@@ -29,19 +29,24 @@ import { jobBoardController } from "@/modules/job-board/job-board.controller";
 import { adminJobListingController, publicJobListingController } from "@/modules/job-listing";
 import { cleanupJob } from "@/modules/maintenance/cleanup.job";
 import { personalApplicationEmailController } from "@/modules/personal/application-email.controller";
+import { personalApprovalController } from "@/modules/personal/approval.controller";
 import { personalAttachmentsController } from "@/modules/personal/attachments.controller";
 import { personalAttemptController } from "@/modules/personal/attempt.controller";
+import { personalBatchesController } from "@/modules/personal/batches/batches.controller";
 import { personalCampaignController } from "@/modules/personal/campaign.controller";
 import { personalChallengeController } from "@/modules/personal/challenge.controller";
 import { personalChallengeVerificationController } from "@/modules/personal/challenge-verification.controller";
+import { personalFollowupController } from "@/modules/personal/followups/controller";
 import { personalHandoffController } from "@/modules/personal/handoff.controller";
 import { personalHostedTransportController } from "@/modules/personal/hosted-transport.controller";
+import { personalLeadsController } from "@/modules/personal/leads/leads.controller";
 import { personalController } from "@/modules/personal/personal.controller";
 import { isPrivateOnlyRoute } from "@/modules/personal/privacy";
 import { personalReadinessController } from "@/modules/personal/readiness.controller";
 import { personalRecoveryController } from "@/modules/personal/recovery.controller";
 import { personalRecruitingController } from "@/modules/personal/recruiting.controller";
 import { personalRegistryController } from "@/modules/personal/registry.controller";
+import { personalYamlController } from "@/modules/personal/yaml.controller";
 import { pilotController } from "@/modules/pilot/pilot.controller";
 import { pilotAgendaController } from "@/modules/pilot/pilot-agenda.controller";
 import { pilotClaimsController } from "@/modules/pilot/pilot-claims.controller";
@@ -87,6 +92,11 @@ const app = new Elysia()
       .use(healthController)
       .use(personalRegistryController)
       .use(personalApplicationEmailController)
+      .use(personalApprovalController)
+      .use(personalLeadsController)
+      .use(personalBatchesController)
+      .use(personalFollowupController)
+      .use(personalYamlController)
       .use(personalHostedTransportController)
       .use(personalController)
       .use(personalRecruitingController)

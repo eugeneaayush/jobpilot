@@ -1,6 +1,7 @@
 import { CampaignService } from "@/modules/campaign/campaign.service";
 import { PersonalAttemptService } from "./attempt.service";
 import {
+  approvePersonalFixture,
   createPersonalTestDatabase,
   type PersonalTestDatabase,
   personalFixture,
@@ -189,6 +190,7 @@ describe.skipIf(!testUrl)("personal attempt PostgreSQL invariants", () => {
     ).rejects.toThrow("SHA256");
     expect((await db.service.reconcile(f.user.id, attempt.id, evidence)).state).toBe("cancelled");
     expect(await db.prisma.personalReservation.count({ where: { attemptId: attempt.id } })).toBe(0);
+    await approvePersonalFixture(db, f.user.id, record.id);
     expect(
       (await db.service.start(f.user.id, { ...input, leaseOwner: "new worker" })).attemptNo,
     ).toBe(2);

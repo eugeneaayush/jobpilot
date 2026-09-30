@@ -11,6 +11,8 @@ export interface GreenhouseField {
   checked?: boolean;
   fileHashes?: string[];
   options: string[];
+  multiple?: boolean;
+  selectedValues?: string[];
   adapter: "greenhouse";
   domId: string;
   widget: "native" | "react_select";
@@ -217,6 +219,23 @@ export async function inspectGreenhouseForm(
           const selectedInput = shell?.querySelector<HTMLInputElement>(
             'input[type="hidden"][name]',
           );
+          const multiple =
+            (element instanceof HTMLSelectElement && element.multiple) ||
+            !!shell?.querySelector(".select__value-container--is-multi") ||
+            element.getAttribute("aria-multiselectable") === "true";
+          const selectedLabels = shell
+            ? [...shell.querySelectorAll(".select__multi-value__label")].map(
+                (item) => item.textContent?.trim() ?? "",
+              )
+            : [];
+          let selectedValues: string[] | undefined;
+          if (multiple) {
+            selectedValues = selectedLabels;
+            if (element instanceof HTMLSelectElement)
+              selectedValues = [...element.selectedOptions].map((option) => option.value);
+            else if (!selectedLabels.length && selectedInput?.value)
+              throw new Error("Greenhouse multiselect selections cannot be verified");
+          }
           let type = element.type;
           if (element instanceof HTMLTextAreaElement) type = "textarea";
           if (element instanceof HTMLSelectElement || widget === "react_select") type = "select";
@@ -255,10 +274,14 @@ export async function inspectGreenhouseForm(
             value,
             checked: element instanceof HTMLInputElement ? element.checked : undefined,
             fileHashes,
-            options: choices.flatMap((choice) => [choice.value, choice.label]),
+            options: multiple
+              ? choices.map((choice) => choice.value)
+              : choices.flatMap((choice) => [choice.value, choice.label]),
             adapter: "greenhouse" as const,
             domId,
             widget,
+            multiple,
+            selectedValues,
             choices,
             selectedLabel,
           };
@@ -297,7 +320,24 @@ export async function inspectGreenhouseForm(
         (choice) => !choice.disabled && !choice.ambiguous,
       );
       field.choices = choices.map(({ label, value }) => ({ label, value }));
-      field.options = field.choices.flatMap((choice) => [choice.value, choice.label]);
+      field.options = field.multiple
+        ? field.choices.map((choice) => choice.value)
+        : field.choices.flatMap((choice) => [choice.value, choice.label]);
+      if (field.multiple) {
+        field.selectedValues = field.selectedValues?.map((label) => {
+          const known = uniqueTrustedChoices(field.trustedChoices).filter(
+            (choice) => choice.label === label,
+          );
+          let matches = field.choices.filter((choice) => choice.label === label);
+          if (!matches.length) matches = known;
+          if (matches.length !== 1)
+            throw new Error("Greenhouse selected option has no unique observed choice");
+          if (!field.choices.some((choice) => choice.value === matches[0]!.value))
+            field.choices.push(matches[0]!);
+          return matches[0]!.value;
+        });
+        field.options = field.choices.map((choice) => choice.value);
+      }
       if (field.domId === "country") {
         const selected = await observedSelection(page, field);
         if (/^\+[1-9][0-9]{0,3}$/.test(selected.label ?? "")) {
@@ -318,10 +358,83 @@ export async function inspectGreenhouseForm(
 export async function fillGreenhouseField(
   page: Page,
   field: GreenhouseField,
-  frozenValue: string | boolean,
+  frozenValue: string | boolean | string[],
   context: { phoneCountryDialCode?: string } = {},
 ) {
   const control = await boundField(page, field);
+  if (field.multiple) {
+    if (!Array.isArray(frozenValue) || new Set(frozenValue).size !== frozenValue.length)
+      throw new Error("Greenhouse multiselect requires a complete approved option set");
+    const selected = frozenValue.map((value) => {
+      const matches = field.choices.filter((choice) => choice.value === value);
+      if (matches.length !== 1)
+        throw new Error("Greenhouse multiselect has no unique exact approved choice");
+      return matches[0]!;
+    });
+    if (field.widget === "native") {
+      const prior = await control.evaluate((element) => {
+        if (!(element instanceof HTMLSelectElement) || !element.multiple)
+          throw new Error("Greenhouse multiselect changed");
+        return [...element.selectedOptions].map((option) => option.value);
+      });
+      if (
+        prior.length &&
+        (prior.length !== frozenValue.length ||
+          !frozenValue.every((value) => prior.includes(value)))
+      )
+        throw new Error("Greenhouse existing selections conflict with approved options");
+      await control.selectOption(selected.map((choice) => choice.value));
+      const actual = await control.evaluate((element) => {
+        if (!(element instanceof HTMLSelectElement) || !element.multiple)
+          throw new Error("Greenhouse multiselect changed");
+        return [...element.selectedOptions].map((option) => option.value);
+      });
+      if (
+        actual.length !== frozenValue.length ||
+        !frozenValue.every((value) => actual.includes(value))
+      )
+        throw new Error("Greenhouse complete option set was not retained");
+      return;
+    }
+    if (
+      field.selectedValues?.length &&
+      (field.selectedValues.length !== frozenValue.length ||
+        !frozenValue.every((value) => field.selectedValues!.includes(value)))
+    )
+      throw new Error("Greenhouse existing selections conflict with approved options");
+    for (const choice of selected.filter(
+      (choice) => !field.selectedValues?.includes(choice.value),
+    )) {
+      await control.click();
+      try {
+        const matches = (await observedChoices(page, field)).filter(
+          (item) =>
+            !item.disabled &&
+            !item.ambiguous &&
+            item.value === choice.value &&
+            item.label === choice.label,
+        );
+        if (matches.length !== 1) throw new Error("Greenhouse multiselect choice changed");
+        await page.locator(`[data-jobpilot-option="${matches[0]!.optionRef}"]`).click();
+      } finally {
+        await control.press("Escape");
+      }
+    }
+    const actualLabels = await control.evaluate((element) =>
+      [
+        ...(element.closest(".select-shell")?.querySelectorAll(".select__multi-value__label") ??
+          []),
+      ].map((item) => item.textContent?.trim() ?? ""),
+    );
+    if (
+      actualLabels.length !== selected.length ||
+      selected.some((choice) => actualLabels.filter((label) => label === choice.label).length !== 1)
+    )
+      throw new Error("Greenhouse complete option set was not retained");
+    return;
+  }
+  if (Array.isArray(frozenValue))
+    throw new Error("Greenhouse answer set requires a multiselect control");
   if (field.widget === "react_select") {
     if (typeof frozenValue !== "string" || !frozenValue)
       throw new Error("Greenhouse select requires an exact approved choice");

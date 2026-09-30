@@ -135,15 +135,18 @@ describe.skipIf(!testUrl)("personal attempt durable completion and artifact boun
   it("freezes employer requisition identity and rejects altered stored identities", async () => {
     const f = await personalFixture(db);
     const { input, record } = await f.record();
-    const attempt = await db.service.start(f.user.id, {
-      ...input,
-      manifest: {
-        ...input.manifest,
-        identity: "forged",
-        requisitionId: "forged",
-        company: "Other",
-      },
-    });
+    await expect(
+      db.service.start(f.user.id, {
+        ...input,
+        manifest: {
+          ...input.manifest,
+          identity: "forged",
+          requisitionId: "forged",
+          company: "Other",
+        },
+      }),
+    ).rejects.toThrow("differs from the exact reviewed application packet");
+    const attempt = await db.service.start(f.user.id, input);
     expect(attempt.manifest).toMatchObject({
       identity: record.identity,
       requisitionId: record.requisitionId,
@@ -177,7 +180,7 @@ describe.skipIf(!testUrl)("personal attempt durable completion and artifact boun
       },
     });
     await expect(db.service.beginSubmit(f.user.id, attempt.id, attempt)).rejects.toThrow(
-      "Attachment requirements belong to an earlier posting",
+      "Application approval is stale",
     );
     expect((await db.service.get(f.user.id, attempt.id)).submitAt).toBeNull();
   });

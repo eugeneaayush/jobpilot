@@ -3,6 +3,7 @@ import { personalSettingsSchema } from "@jobpilot/contracts/personal";
 import {
   type PersonalReadiness,
   type PersonalScreeningAnswersInput,
+  personalScreeningAnswersResponseSchema,
   personalScreeningSnapshotSchema,
 } from "@jobpilot/contracts/personal-readiness";
 import { singleton } from "tsyringe";
@@ -10,9 +11,14 @@ import { z } from "zod/v4";
 import { conflict, notFound } from "@/common/errors";
 import { env } from "@/env";
 import { type PersonalRecord, type Prisma, PrismaClient } from "@/generated/prisma/client";
+import { screeningSuggestions } from "./answers-policy";
 import { postingContentHash, storedRequirements } from "./attachments-policy";
 import { manifestHash, privateArtifactRoot, readPrivateArtifact } from "./persistence-policy";
-import { missingPersonalSettings, probeTerminalReadiness } from "./readiness-policy";
+import {
+  answeredScreeningFields,
+  missingPersonalSettings,
+  probeTerminalReadiness,
+} from "./readiness-policy";
 import {
   adjudicatedRequirements,
   overallEligibility,
@@ -112,12 +118,19 @@ export class PersonalReadinessService {
     if (!record) throw notFound("Personal record not found");
     const value = objectValue(record.details).screeningAnswers;
     const snapshot = value ? personalScreeningSnapshotSchema.parse(value) : null;
+    const questions = await this.observedQuestions(userId, recordId);
+    const settings = await readSettings(userId);
     return {
       recordId,
       updatedAt: record.updatedAt,
       snapshot,
       requiresPreview: Boolean(snapshot),
-      questions: await this.observedQuestions(userId, recordId),
+      questions,
+      suggestions: screeningSuggestions(
+        questions,
+        settings,
+        textValue(objectValue(objectValue(record.details).posting).location) || null,
+      ),
     };
   }
 
@@ -177,17 +190,8 @@ export class PersonalReadinessService {
       const unknownRequirements = requirements
         .filter((requirement) => requirement.status === "unknown")
         .map((requirement) => requirement.requirement);
-      const answered = (fieldName: string) => {
-        if (!fieldName) return false;
-        const matching = input.answers.filter(
-          (answer) =>
-            answer.fieldName === fieldName || (!answer.fieldName && answer.key === fieldName),
-        );
-        return (
-          matching.length === 1 &&
-          (typeof matching[0]!.value === "boolean" || matching[0]!.value.trim().length > 0)
-        );
-      };
+      const answeredFields = answeredScreeningFields(input.answers, questions);
+      const answered = (fieldName: string) => answeredFields.has(fieldName);
       const employerQuestions = questions.filter(
         (question) => !["file", "input_file"].includes(question.type),
       );
@@ -259,7 +263,7 @@ export class PersonalReadinessService {
   private async questionsForRecord(
     record: PersonalRecord,
     db: Pick<Prisma.TransactionClient, "personalAttempt">,
-  ) {
+  ): Promise<z.infer<typeof personalScreeningAnswersResponseSchema>["questions"]> {
     const userId = record.userId;
     const recordId = record.id;
     const inventory = storedRequirements(record);
@@ -276,7 +280,21 @@ export class PersonalReadinessService {
                 label: z.string().max(1000),
                 required: z.boolean(),
                 fields: z
-                  .array(z.object({ name: z.string().max(300), type: z.string().max(40) }))
+                  .array(
+                    z.object({
+                      name: z.string().max(300),
+                      type: z.string().max(40),
+                      values: z
+                        .array(
+                          z.object({
+                            value: z.union([z.string(), z.number()]),
+                            label: z.string().max(1000),
+                          }),
+                        )
+                        .max(1000)
+                        .optional(),
+                    }),
+                  )
                   .max(30),
               }),
             )
@@ -296,6 +314,15 @@ export class PersonalReadinessService {
             .map((field) => ({
               fieldName: field.name,
               type: field.type,
+              ...(["multi_value_single_select", "multi_value_multi_select"].includes(field.type)
+                ? {
+                    multiple: field.type === "multi_value_multi_select",
+                    options: field.values?.map((option) => ({
+                      value: String(option.value),
+                      label: option.label,
+                    })),
+                  }
+                : {}),
               label: question.label,
               required: question.required,
             })),
@@ -337,12 +364,23 @@ export class PersonalReadinessService {
               label: z.string().max(1000),
               type: z.string().max(40),
               required: z.boolean(),
+              multiple: z.boolean().optional(),
+              options: z.array(z.string().max(1000)).max(1000).optional(),
             }),
           )
           .max(500),
       })
       .safeParse(contents);
     if (!inspection.success) throw conflict("Private inspection has invalid question metadata");
-    return inspection.data.fields.map(({ name, ...field }) => ({ fieldName: name, ...field }));
+    return inspection.data.fields.map(({ name, options, multiple, ...field }) => ({
+      fieldName: name,
+      ...field,
+      ...(field.type === "select"
+        ? {
+            multiple: multiple ?? false,
+            options: options?.map((value) => ({ value, label: value })),
+          }
+        : {}),
+    }));
   }
 }

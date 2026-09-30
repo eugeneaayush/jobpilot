@@ -1,7 +1,11 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { manifestHash } from "./persistence-policy";
-import type { PersonalTestDatabase, personalFixture } from "./persistence-test-fixtures";
+import {
+  approvePersonalFixture,
+  type PersonalTestDatabase,
+  type personalFixture,
+} from "./persistence-test-fixtures";
 import { objectValue } from "./runtime";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
@@ -74,6 +78,8 @@ describe.skipIf(!testUrl)("source-backed employer caps at the reservation bounda
     });
     second.input.campaignId = campaign.campaignId;
     await cap(f.user.id, 1);
+    await approvePersonalFixture(db, f.user.id, first.record.id, first.input.campaignId);
+    await approvePersonalFixture(db, f.user.id, second.record.id, second.input.campaignId);
     return { ...f, first, second };
   }
 
@@ -117,7 +123,12 @@ describe.skipIf(!testUrl)("source-backed employer caps at the reservation bounda
   it("a configured employer ceiling of three cannot override a lower user ceiling", async () => {
     const f = await setup();
     await cap(f.user.id, 3);
-    await db.prisma.personalPolicy.create({ data: { userId: f.user.id, employerActiveCap: 1 } });
+    await db.prisma.personalPolicy.update({
+      where: { userId: f.user.id },
+      data: { employerActiveCap: 1 },
+    });
+    await approvePersonalFixture(db, f.user.id, f.first.record.id, f.first.input.campaignId);
+    await approvePersonalFixture(db, f.user.id, f.second.record.id, f.second.input.campaignId);
     await db.service.start(f.user.id, f.first.input);
     await expect(db.service.start(f.user.id, f.second.input)).rejects.toThrow(
       "active-application limit",

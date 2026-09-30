@@ -1,5 +1,6 @@
 import { eligibilityContext } from "./eligibility-freshness";
 import {
+  approvePersonalFixture,
   createPersonalTestDatabase,
   type PersonalTestDatabase,
   personalFixture,
@@ -18,7 +19,7 @@ describe.skipIf(!testUrl)("campaign role scope at the PostgreSQL submit boundary
   });
 
   async function fixture() {
-    const f = await personalFixture(db);
+    const f = await personalFixture(db, "submit", 3, false);
     const policy = {
       ...objectValue(objectValue(f.campaign.config).personal),
       tracks: ["mba_internship", "general_professional"],
@@ -46,6 +47,7 @@ describe.skipIf(!testUrl)("campaign role scope at the PostgreSQL submit boundary
         }),
       },
     });
+    await approvePersonalFixture(db, f.user.id, evaluated.id);
     return { ...f, ...r, record: evaluated, policy };
   }
 
@@ -69,7 +71,7 @@ describe.skipIf(!testUrl)("campaign role scope at the PostgreSQL submit boundary
       data: { title: "Full-time Technical Product Manager" },
     });
     await expect(db.service.beginSubmit(f.user.id, attempt.id, attempt)).rejects.toThrow(
-      "Recruiting constraint needs current source review",
+      "not an internship",
     );
     expect((await db.service.get(f.user.id, attempt.id)).submitAt).toBeNull();
   });
@@ -84,7 +86,7 @@ describe.skipIf(!testUrl)("campaign role scope at the PostgreSQL submit boundary
       data: { config: { personal: policy } },
     });
     await expect(db.service.beginSubmit(f.user.id, attempt.id, attempt)).rejects.toThrow(
-      "Campaign policy changed",
+      "Application approval is stale",
     );
     expect((await db.service.get(f.user.id, attempt.id)).submitAt).toBeNull();
   });

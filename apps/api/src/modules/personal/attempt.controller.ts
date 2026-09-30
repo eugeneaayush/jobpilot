@@ -46,6 +46,22 @@ export const personalAttemptController = new Elysia({
     },
   )
   .post(
+    "/:id/authorize-transmission",
+    async ({ user, params, body }) =>
+      personalAttemptResponseSchema.parse(
+        await svc.authorizeTransmission(user.id, params.id, body),
+      ),
+    {
+      params: idParam,
+      body: personalAttemptLeaseSchema,
+      response: personalAttemptResponseSchema,
+      beforeHandle: rateLimit(RATE_LIMITS.personalAttemptControl),
+      detail: {
+        summary: "Recheck exact application approval immediately before browser transmission",
+      },
+    },
+  )
+  .post(
     "/:id/checkpoint",
     async ({ user, params, body }) =>
       personalAttemptResponseSchema.parse(await svc.checkpoint(user.id, params.id, body)),

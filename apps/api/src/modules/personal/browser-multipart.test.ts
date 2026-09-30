@@ -86,6 +86,8 @@ async function fixture(mutation: "clear" | "replace" | "none") {
             identity: manifest.identity,
             requisitionId: "123",
           });
+        if (path.endsWith("/authorize-transmission"))
+          return Response.json({ status: "authorized" });
         if (path.endsWith("/begin-submit")) {
           events.push("begin-submit");
           state = "submitting";

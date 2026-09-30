@@ -5,8 +5,12 @@ import type { ResumeData } from "@jobpilot/contracts/resume";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { tailorBase } from "../resume/tailor";
 import { CbsTemplate } from "./document/cbs-template";
+import { assertRendererConfiguration, documentPipelineInputs } from "./local-tools/pipeline-config";
+import { assertRendererMapping } from "./local-tools/renderer-mapping";
+import { runLocalTool } from "./local-tools/runner";
 import { draftDocx } from "./tailoring/docx";
 import { applyReviewedProposal, type ReviewedProposal, tailoringHash } from "./tailoring/proposal";
+import { applyImportedStructure, localToolSourceHash } from "./yaml.structure";
 
 export interface DocumentOptions {
   jobKeywords?: string[];
@@ -16,6 +20,10 @@ export interface DocumentOptions {
   requestedMode?: "extractive" | "rewrite";
   reviewedProposal?: ReviewedProposal;
   maxPages?: 1 | 2;
+  renderer?: "cbs-letter-times" | "rendercv-classic";
+  userId?: string;
+  signal?: AbortSignal;
+  documentEdits?: unknown;
 }
 export interface DocumentManifest {
   path: string;
@@ -25,7 +33,13 @@ export interface DocumentManifest {
   status: "draft";
   conflicts: unknown[];
   renderQa: "required";
-  template: "cbs-letter-times";
+  template: "cbs-letter-times" | "rendercv-classic";
+  rendererVersion: string;
+  rendererConfigHash: string;
+  documentPipelineVersion: string;
+  verifierConfigHash: string;
+  rendererMapping?: { path: string; sha256: string; bytes: number };
+  verifierVersion: "1";
   generatedAt: string;
   data: ResumeData;
   manifestPath: string;
@@ -98,25 +112,77 @@ export async function generateDraftPdf(
     ...base.experience.map((entry) => entry.bullets.length),
     ...base.projects.map((entry) => entry.bullets.length),
   );
-  const tailored = tailorBase(structuredClone(base), {
-    jobKeywords: options.jobKeywords,
-    emphasizedTech: options.emphasizedTech,
-    maxBulletsPerEntry: maxBullets,
-  });
-  const bytes = await renderToBuffer(
-    CbsTemplate({
-      data: tailored,
-      unresolvedFacts: (options.conflicts?.length ?? 0) > 0,
-      maxPages,
-    }),
-  );
-  const pageCount = [...bytes.toString("latin1").matchAll(/\/Type\s*\/Page\b/g)].length;
+  if (options.documentEdits && !options.reviewedProposal)
+    throw new Error("Imported selections require an independently reviewed proposal");
+  const tailored =
+    options.documentEdits && options.reviewedProposal
+      ? applyImportedStructure(data, base, options.documentEdits, options.reviewedProposal)
+      : tailorBase(structuredClone(base), {
+          jobKeywords: options.jobKeywords,
+          emphasizedTech: options.emphasizedTech,
+          maxBulletsPerEntry: maxBullets,
+        });
+  const renderer = options.renderer ?? "cbs-letter-times";
+  let bytes: Buffer;
+  const pipeline = documentPipelineInputs(renderer);
+  let rendererVersion = pipeline.rendererVersion;
+  let rendererConfigHash = pipeline.rendererConfigHash;
+  let renderedPageCount: number | undefined;
+  let mappingBytes: Buffer | undefined;
+  if (renderer === "rendercv-classic") {
+    if (!options.userId) throw new Error("RenderCV requires a private document owner");
+    if (options.conflicts?.length)
+      throw new Error("Resolve source conflicts before rendering with RenderCV");
+    const output = await runLocalTool(
+      options.userId,
+      "render_resume",
+      { resume: tailored, renderer, maxPages },
+      { signal: options.signal },
+    );
+    assertRendererConfiguration(renderer, output.result);
+    if (output.result.sourceSha256 !== localToolSourceHash(tailored))
+      throw new Error("Renderer changed its accepted source mapping");
+    mappingBytes = output.artifacts[output.result.mappingFilename];
+    assertRendererMapping(
+      JSON.parse(mappingBytes.toString()),
+      tailored,
+      output.result.configSha256,
+    );
+    bytes = output.artifacts[output.result.filename];
+    rendererVersion = output.result.rendererVersion;
+    rendererConfigHash = output.result.configSha256;
+    renderedPageCount = output.result.pageCount;
+  } else {
+    bytes = await renderToBuffer(
+      CbsTemplate({
+        data: tailored,
+        unresolvedFacts: (options.conflicts?.length ?? 0) > 0,
+        maxPages,
+      }),
+    );
+  }
+  const pageCount =
+    renderedPageCount ?? [...bytes.toString("latin1").matchAll(/\/Type\s*\/Page\b/g)].length;
   if (pageCount < 1) throw new Error("PDF page count could not be verified");
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const directory = join(runtimeDir, "documents");
   await mkdir(directory, { recursive: true, mode: 0o700 });
   await chmod(runtimeDir, 0o700);
   await chmod(directory, 0o700);
+  let rendererMapping: DocumentManifest["rendererMapping"];
+  if (mappingBytes) {
+    const mappingHash = createHash("sha256").update(mappingBytes).digest("hex");
+    const mappingPath = join(directory, `${mappingHash}.mapping.json`);
+    await writeFile(mappingPath, mappingBytes, { mode: 0o600, flag: "wx" }).catch(
+      (error: NodeJS.ErrnoException) => {
+        if (error.code !== "EEXIST") throw error;
+      },
+    );
+    if (!mappingBytes.equals(await readFile(mappingPath)))
+      throw new Error("Frozen renderer mapping mismatch");
+    await chmod(mappingPath, 0o600);
+    rendererMapping = { path: mappingPath, sha256: mappingHash, bytes: mappingBytes.length };
+  }
   const path = join(directory, `${sha256}.pdf`);
   await writeFile(path, bytes, { mode: 0o600, flag: "wx" }).catch(
     (error: NodeJS.ErrnoException) => {
@@ -171,7 +237,13 @@ export async function generateDraftPdf(
         : []),
     ],
     renderQa: "required",
-    template: "cbs-letter-times",
+    template: renderer,
+    rendererVersion,
+    rendererConfigHash,
+    documentPipelineVersion: pipeline.documentPipelineVersion,
+    verifierConfigHash: pipeline.verifierConfigHash,
+    ...(rendererMapping && { rendererMapping }),
+    verifierVersion: pipeline.verifierVersion,
     generatedAt: new Date().toISOString(),
     data: tailored,
     tailoringMode: rewritten ? "reviewed_rewrite" : "extractive",

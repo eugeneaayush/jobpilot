@@ -44,9 +44,23 @@ const pointer = z
   .regex(/^(\/(?:[^~]|~[01])*)+$/)
   .max(1000);
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
+export const personalScreeningValueSchema = z.union([
+  z.string().max(10000),
+  z.boolean(),
+  z
+    .array(
+      z
+        .string()
+        .min(1)
+        .max(1000)
+        .refine((value) => value.trim().length > 0),
+    )
+    .max(50)
+    .refine((values) => new Set(values).size === values.length, "Selection values must be unique"),
+]);
 const personalScreeningAnswerSchema = z.object({
   key: z.string().regex(/^[a-zA-Z0-9_.:-]{1,150}$/),
-  value: z.union([z.string().max(10000), z.boolean()]),
+  value: personalScreeningValueSchema,
   fieldName: z.string().min(1).max(300).optional(),
   label: z.string().min(1).max(1000).optional(),
   source: z.discriminatedUnion("kind", [
@@ -105,7 +119,25 @@ export const personalScreeningSnapshotSchema = z.object({
   snapshotHash: hash,
   answers: z.array(personalScreeningAnswerSchema),
 });
+const personalScreeningSuggestionSchema = z.object({
+  fieldName: z.string(),
+  category: z.enum([
+    "authorization",
+    "sponsorship",
+    "skill_experience",
+    "total_experience",
+    "compensation",
+    "relocation",
+    "availability",
+    "voluntary_demographic",
+    "consent",
+    "unknown",
+  ]),
+  answer: personalScreeningAnswerSchema.nullable(),
+  reason: z.string(),
+});
 export const personalScreeningAnswersResponseSchema = z.object({
+  suggestions: z.array(personalScreeningSuggestionSchema).optional(),
   recordId: z.uuid(),
   updatedAt: z.date(),
   snapshot: personalScreeningSnapshotSchema.nullable(),
@@ -117,6 +149,11 @@ export const personalScreeningAnswersResponseSchema = z.object({
         label: z.string().max(1000),
         type: z.string().max(40),
         required: z.boolean(),
+        multiple: z.boolean().optional(),
+        options: z
+          .array(z.object({ value: z.string().max(1000), label: z.string().max(1000) }))
+          .max(1000)
+          .optional(),
       }),
     )
     .max(500),
@@ -125,3 +162,5 @@ export type PersonalReadiness = z.infer<typeof personalReadinessSchema>;
 export type PersonalTerminalReadiness = z.infer<typeof personalTerminalReadinessSchema>;
 export type PersonalScreeningAnswer = z.infer<typeof personalScreeningAnswerSchema>;
 export type PersonalScreeningAnswersInput = z.infer<typeof personalScreeningAnswersInputSchema>;
+
+export type PersonalScreeningSuggestion = z.infer<typeof personalScreeningSuggestionSchema>;

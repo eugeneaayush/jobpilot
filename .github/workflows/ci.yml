@@ -9,6 +9,20 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: jobpilot_test
+          POSTGRES_PASSWORD: synthetic_test_only
+          POSTGRES_DB: jobpilot_integration
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U jobpilot_test -d jobpilot_integration"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     concurrency:
       group: ci-${{ github.ref }}
       cancel-in-progress: true
@@ -30,6 +44,23 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Setup locked Python utilities
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install PDF verification tools
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
+
+      - name: Test locked Python utilities
+        working-directory: services/local-tools
+        run: |
+          uv sync --frozen
+          uv run --frozen pytest -q
+
+      - name: Install synthetic browser runtime
+        run: bun x playwright install --with-deps chromium
 
       - name: Test marketplace staging
         run: |
@@ -75,8 +106,13 @@ jobs:
         run: bun run typecheck
         working-directory: apps/api
 
-      # Still no services. The admin guard test imports a real controller, so env.ts has to validate -
-      # these are dummies: pg pools are lazy, and the 401/403 paths it asserts never issue a query.
+      - name: Check shared contracts and private scripts
+        run: |
+          bun --cwd=packages/contracts run typecheck
+          bun run personal:typecheck
+          bun --cwd=packages/contracts run test
+
+      # Only the disposable service is reachable; private fixtures create/drop their own schemas.
       - name: Test API
         run: bun run test
         working-directory: apps/api
@@ -84,6 +120,7 @@ jobs:
           DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
           JWT_SECRET: ci-test-secret
           SECRET_MASTER_KEY: Y2ktdGVzdC1tYXN0ZXIta2V5LTMyLWJ5dGVzLWxvbmc=
+          PERSONAL_TEST_DATABASE_URL: postgresql://jobpilot_test:synthetic_test_only@localhost:5432/jobpilot_integration
 
       - name: Typegen web
         run: bun run typegen

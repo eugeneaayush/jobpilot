@@ -23,6 +23,8 @@ export function personalRecordDto(
     state: record.state,
     fitScore: typeof details.fitScore === "number" ? details.fitScore : null,
     fitReasons: stringsValue(details.fitReasons),
+    fitEvaluation: details.fitEvaluation ?? null,
+    documentVerification: details.documentVerification ?? null,
     seniority: recordSeniority(record),
     eligibility: {
       decision: freshness.status !== "current" ? "unknown" : (eligibility.decision ?? "unknown"),

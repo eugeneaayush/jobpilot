@@ -1,5 +1,7 @@
 import { z } from "zod/v4";
 import { paginatedSchema, paginationQuerySchema } from "./pagination";
+import { personalFitEvaluationSchema } from "./personal-fit";
+import { personalDocumentVerificationSchema } from "./personal-local-tools";
 import { personalSenioritySchema } from "./personal-seniority";
 
 export const personalTrackSchema = z.enum([
@@ -38,6 +40,8 @@ export const personalRecordSchema = z.object({
   state: personalStateSchema,
   fitScore: z.number().nullable(),
   fitReasons: z.array(z.string()),
+  fitEvaluation: personalFitEvaluationSchema.nullable().optional(),
+  documentVerification: personalDocumentVerificationSchema.nullable().optional(),
   seniority: personalSenioritySchema.optional(),
   eligibility: z.object({
     decision: z.enum(["eligible", "ineligible", "unknown"]),
@@ -132,6 +136,7 @@ export const personalRenderReviewSchema = z.object({
   notes: z.string().min(1).max(2000),
 });
 export const personalSettingsSchema = z.object({
+  resumeRenderer: z.enum(["cbs-letter-times", "rendercv-classic"]).optional(),
   recruitingAvailability: z
     .object({
       partTimeNow: z.boolean(),
@@ -154,6 +159,32 @@ export const personalSettingsSchema = z.object({
       employerSupportedInternational: z.boolean(),
       unrestrictedTravelRelocation: z.boolean(),
     })
+    .optional(),
+  screeningDefaults: z
+    .object({
+      skillExperience: z
+        .array(
+          z
+            .object({ skill: z.string().trim().min(1).max(100), years: z.number().min(0).max(80) })
+            .strict(),
+        )
+        .max(100)
+        .refine(
+          (items) => new Set(items.map((item) => item.skill.toLowerCase())).size === items.length,
+          "Skill names must be unique",
+        ),
+      desiredCompensation: z
+        .object({
+          amount: z.number().nonnegative(),
+          currency: z.string().regex(/^[A-Z]{3}$/),
+          period: z.enum(["year", "hour"]),
+        })
+        .strict()
+        .nullable(),
+      willingToRelocate: z.boolean().nullable(),
+      voluntaryDemographics: z.literal("decline").nullable(),
+    })
+    .strict()
     .optional(),
   mbaEnrolled: z.boolean().nullable().default(null),
   graduationYear: z.number().int().min(2000).max(2100).nullable().default(null),

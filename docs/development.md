@@ -50,6 +50,17 @@ via a bastion.
   build step.
 - [packages/](../packages/): shared Zod contracts and the typed Eden Treaty
   API client.
+- [services/local-tools/](../services/local-tools/): locked Python utilities owned
+  by the private API, invoked per request for optional lead discovery, RenderCV,
+  controlled YAML mapping and exact-PDF verification.
+
+The private recruiting workflow is documented separately in
+[the integration plan](integration/INTEGRATION_PLAN.md),
+[setup and migration instructions](integration/SETUP.md), and
+[executed validation](integration/VALIDATION.md). Its optional tools use
+`bun run personal:tools:setup`; the general plugin and three-app development topology
+remain unchanged. Private approval grants require the dashboard session cookie rather
+than the agent token described below.
 
 ## Tech stack
 

@@ -1,0 +1,40 @@
+{
+  "source": {
+    "basics": {
+      "name": "Alex Éxample",
+      "email": "alex@example.com"
+    },
+    "summary": "C++ and C# research",
+    "experience": [],
+    "projects": [],
+    "education": [],
+    "skills": [],
+    "publications": [],
+    "awards": [],
+    "certifications": [],
+    "sections": []
+  },
+  "sourceSha256": "880a0ae5895d52a5c795fc3ec109b348b2ad14e65c00911bf8730efa757d4c5d",
+  "request": {
+    "protocolVersion": 1,
+    "requestId": "parity-1",
+    "operation": "export_resume_yaml",
+    "payload": {
+      "resume": {
+        "basics": {
+          "name": "Alex Éxample",
+          "email": "alex@example.com"
+        },
+        "summary": "C++ and C# research",
+        "experience": [],
+        "projects": [],
+        "education": [],
+        "skills": [],
+        "publications": [],
+        "awards": [],
+        "certifications": [],
+        "sections": []
+      }
+    }
+  }
+}

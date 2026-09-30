@@ -8,6 +8,7 @@ import {
   eligibilityRefreshClaimed,
 } from "./eligibility-freshness";
 import { type CandidateFacts, evaluatePosting } from "./evaluation";
+import { campaignKeywords } from "./fit-evaluation";
 import { manifestHash } from "./persistence-policy";
 import { PersonalService } from "./personal.service";
 import { preparationPreviewHash } from "./preparation-policy";
@@ -57,25 +58,7 @@ export class PersonalReassessmentService {
       ...(settings.availableUntil !== null && { availabilityEnd: settings.availableUntil }),
       ...(settings.availabilityNotes !== null && { availabilityNotes: settings.availabilityNotes }),
     };
-    const sourceSkills = resume.sections.flatMap((section) =>
-      section.entries
-        .filter((entry) => /^skills$/i.test(entry.heading))
-        .flatMap((entry) =>
-          [entry.subheading ?? "", ...entry.bullets].flatMap((text) =>
-            text
-              .split(/[,;]/)
-              .map((word) => word.trim())
-              .filter(Boolean),
-          ),
-        ),
-    );
-    const keywords = [
-      ...new Set([
-        ...settings.targetFunctions,
-        ...resume.skills.flatMap((group) => group.items),
-        ...sourceSkills,
-      ]),
-    ];
+    const keywords = campaignKeywords(resume, settings);
     const settingsHash = manifestHash(settings);
     const sources = { settings, evidence };
     const before = new Date();
@@ -195,6 +178,7 @@ export class PersonalReassessmentService {
           resumeEvidenceId: evidence.id,
           fitScore: evaluation.fitScore,
           fitReasons: evaluation.fitReasons,
+          fitEvaluation: evaluation.fitEvaluation,
         } as Record<string, unknown>;
         const context = recoveryContext(
           { ...row, details: jsonValue(details) as Prisma.JsonValue },

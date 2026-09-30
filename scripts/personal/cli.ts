@@ -1,6 +1,7 @@
 import path from "node:path";
 import type { PersonalDashboard, PersonalRecordDto } from "../../packages/contracts/src/personal";
 import { apiRequest, dotnet, readConfig, repository, runtimeRoot } from "./common";
+import { setupLocalTools } from "./local-tools";
 import { operation } from "./operations";
 import { doctor, ensureDatabase, setup } from "./setup";
 
@@ -108,6 +109,7 @@ async function preview(): Promise<void> {
 try {
   const command = process.argv[2];
   if (command === "doctor") await doctor();
+  else if (command === "tools-setup") console.log(JSON.stringify(await setupLocalTools(), null, 2));
   else if (command === "setup") await setup();
   else if (command === "dev") await dev();
   else if (command === "preview") await preview();

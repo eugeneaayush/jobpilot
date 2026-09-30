@@ -3,8 +3,10 @@ import { dirname, join } from "node:path";
 import { personalRecoveryResponseSchema } from "@jobpilot/contracts/personal-recovery";
 import { PersonalCampaignService } from "./campaign.service";
 import { eligibilityContext } from "./eligibility-freshness";
+import { documentPipelineInputs } from "./local-tools/pipeline-config";
 import { manifestHash } from "./persistence-policy";
 import {
+  approvePersonalFixture,
   createPersonalTestDatabase,
   type PersonalTestDatabase,
   personalFixture,
@@ -98,7 +100,12 @@ describe.skipIf(!testUrl)("personal recovery PostgreSQL lifecycle", () => {
           details: jsonValue({
             ...objectValue(current.details),
             eligibilityContext: eligibilityContext(current, { settings, evidence }),
-            document: { path: f.artifactPath, sha256: db.hash },
+            document: {
+              ...documentPipelineInputs("cbs-letter-times"),
+              template: "cbs-letter-times",
+              path: f.artifactPath,
+              sha256: db.hash,
+            },
             manifestPath,
             preview: {
               ...objectValue(objectValue(r.record.details).preview),
@@ -129,6 +136,7 @@ describe.skipIf(!testUrl)("personal recovery PostgreSQL lifecycle", () => {
       });
     }
     async function next() {
+      if (mode === "submit") await approvePersonalFixture(db, f.user.id, r.record.id, campaign.id);
       const task = await campaigns.next(f.user.id, campaign.id, "synthetic-supervisor");
       if (task.status !== "task") throw new Error(`No synthetic task: ${task.reasons.join("; ")}`);
       return task;

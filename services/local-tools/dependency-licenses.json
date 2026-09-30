@@ -1,0 +1,601 @@
+{
+  "distributionSource": "uv.lock, Python3.12 on macOS arm64; no binary files vendored",
+  "packages": [
+    {
+      "name": "annotated-doc",
+      "version": "0.0.5",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "notices/annotated-doc-LICENSE",
+          "sha256": "fff170779a6acbf65abdb405c087f1cee1786691e4a96a4034517e4a504a0cdf"
+        }
+      ]
+    },
+    {
+      "name": "annotated-types",
+      "version": "0.8.0",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "notices/annotated-types-LICENSE",
+          "sha256": "fe1049884b1a0d9342901e88e07f32925d24b3121d9972b6a6805fb9824b095d"
+        }
+      ]
+    },
+    {
+      "name": "anyio",
+      "version": "4.15.1",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "notices/anyio-LICENSE",
+          "sha256": "5361ac9dc58f2ef5fd2e9b09c68297c17f04950909bbc8023bdb82eacf22c2b0"
+        }
+      ]
+    },
+    {
+      "name": "beautifulsoup4",
+      "version": "4.14.3",
+      "license": "MIT License",
+      "notices": [
+        {
+          "path": "notices/beautifulsoup4-LICENSE",
+          "sha256": "55b4d8d4b1e5bc86d10efac91b74c87bcb77526b0f5b9edaf8b9cd2adc7397b2"
+        }
+      ]
+    },
+    {
+      "name": "certifi",
+      "version": "2026.7.22",
+      "license": "MPL-2.0",
+      "notices": [
+        {
+          "path": "notices/certifi-LICENSE",
+          "sha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7"
+        }
+      ]
+    },
+    {
+      "name": "dnspython",
+      "version": "2.8.0",
+      "license": "ISC",
+      "notices": [
+        {
+          "path": "notices/dnspython-LICENSE",
+          "sha256": "c3ea3ff5654b329c19d3bc5f7481af623c3dded4a6145585499f843ad3d741cd"
+        }
+      ]
+    },
+    {
+      "name": "email-validator",
+      "version": "2.3.0",
+      "license": "Unlicense",
+      "notices": [
+        {
+          "path": "notices/email-validator-LICENSE",
+          "sha256": "672179752e109134a3fb2bdd0780b29fdb7a03974f0f586a13aead5129562d4c"
+        }
+      ]
+    },
+    {
+      "name": "h11",
+      "version": "0.16.0",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "notices/h11-LICENSE.txt",
+          "sha256": "37db5bb85926db28a427a25867f10b1232003aea1be69ccb851138adb8e6f361"
+        }
+      ]
+    },
+    {
+      "name": "httpcore",
+      "version": "1.0.9",
+      "license": "BSD-3-Clause",
+      "notices": [
+        {
+          "path": "notices/httpcore-LICENSE.md",
+          "sha256": "fdcb59154c74cbaba16a11242f7740bea9f23d6feb5547917d8c5f94a80392a5"
+        }
+      ]
+    },
+    {
+      "name": "httpx",
+      "version": "0.28.1",
+      "license": "BSD-3-Clause",
+      "notices": [
+        {
+          "path": "notices/httpx-LICENSE.md",
+          "sha256": "4ec59d544f12b5f539a3a716fd321ac58ccd8030b465221f2c880200cdf28d8d"
+        }
+      ]
+    },
+    {
+      "name": "idna",
+      "version": "3.20",
+      "license": "BSD-3-Clause",
+      "notices": [
+        {
+          "path": "notices/idna-LICENSE.md",
+          "sha256": "1a9a4f0e3d479a27240ddd59a9137a66ab4a0f9dfdc8ca6188cc0bfd85187f04"
+        }
+      ]
+    },
+    {
+      "name": "iniconfig",
+      "version": "2.3.0",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "notices/iniconfig-LICENSE",
+          "sha256": "3409fa91f7ace557894632676656e32264fe5ef7581535725dc9a23774551bd4"
+        }
+      ]
+    },
+    {
+      "name": "Jinja2",
+      "version": "3.1.6",
+      "license": "BSD License",
+      "notices": [
+        {
+          "path": "notices/jinja2-LICENSE.txt",
+          "sha256": "3b49dcee4105eb37bac10faf1be260408fe85d252b8e9df2e0979fc1e094437b"
+        }
+      ]
+    },
+    {
+      "name": "jobpilot-jobspy",
+      "version": "1.0.0",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "notices/jobpilot-jobspy-LICENSE",
+          "sha256": "9cc13e45f26ec0760dddfe43a537dac77249fb5dd7f926767f6029452e766cda"
+        }
+      ]
+    },
+    {
+      "name": "jobpilot-local-tools",
+      "version": "1.0.0",
+      "license": "Repository license",
+      "notices": []
+    },
+    {
+      "name": "Markdown",
+      "version": "3.11",
+      "license": "BSD-3-Clause",
+      "notices": [
+        {
+          "path": "notices/markdown-LICENSE.md",
+          "sha256": "eda6feddd55b42a8f083c472426de95771f66c2bc1d1ab56571685fd9d6204b4"
+        }
+      ]
+    },
+    {
+      "name": "markdown-it-py",
+      "version": "4.2.0",
+      "license": "MIT License",
+      "notices": [
+        {
+          "path": "notices/markdown-it-py-LICENSE",
+          "sha256": "4a2260d6e2cd0f5a151a1e86dbfe7d3ed552b1e2beabf9941c1ba5c49cbce484"
+        }
+      ]
+    },
+    {
+      "name": "MarkupSafe",
+      "version": "3.0.3",
+      "license": "BSD-3-Clause",
+      "notices": [
+        {
+          "path": "notices/markupsafe-LICENSE.txt",
+          "sha256": "489a8e1108509ed98a37bb983e11e0f7e1d31f0bd8f99a79c8448e7ff37d07ea"
+        }
+      ]
+    },
+    {
+      "name": "mdurl",
+      "version": "0.1.2",
+      "license": "MIT License",
+      "notices": [
+        {
+          "path": "notices/mdurl-LICENSE",
+          "sha256": "7c605df6e28667a9603118e98274f64a49ce3eed0d26fccce9534a345e0ef955"
+        }
+      ]
+    },
+    {
+      "name": "packaging",
+      "version": "26.3",
+      "license": "Apache-2.0 OR BSD-2-Clause",
+      "notices": [
+        {
+          "path": "notices/packaging-LICENSE",
+          "sha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48"
+        }
+      ]
+    },
+    {
+      "name": "phonenumbers",
+      "version": "9.0.40",
+      "license": "Apache-2.0",
+      "notices": [
+        {
+          "path": "notices/phonenumbers-LICENSE",
+          "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+        }
+      ]
+    },
+    {
+      "name": "pluggy",
+      "version": "1.6.0",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "notices/pluggy-LICENSE",
+          "sha256": "d6b65e6c213a5d0b577911d34d6e5949b9f59d76c238c5071a2f3fc16cfb2606"
+        }
+      ]
+    },
+    {
+      "name": "pydantic",
+      "version": "2.12.5",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "notices/pydantic-LICENSE",
+          "sha256": "a9e186f3ca16b5eef84318e7a701721351a00cb7b8ae3a4394b67b49e3529ef3"
+        }
+      ]
+    },
+    {
+      "name": "pydantic-extra-types",
+      "version": "2.11.1",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "notices/pydantic-extra-types-LICENSE",
+          "sha256": "a09bbbbb46be63e89ef39a5a6f72d610da47b2a6b6ba0eef1442327f1cf23eeb"
+        }
+      ]
+    },
+    {
+      "name": "pydantic_core",
+      "version": "2.41.5",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "notices/pydantic_core-LICENSE",
+          "sha256": "2afdd30d54b4d62b6f488a6bcc1546e84ec5061f13f4209c03d012348783795a"
+        }
+      ]
+    },
+    {
+      "name": "Pygments",
+      "version": "2.21.0",
+      "license": "BSD-2-Clause",
+      "notices": [
+        {
+          "path": "notices/pygments-LICENSE",
+          "sha256": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17"
+        }
+      ]
+    },
+    {
+      "name": "pypdf",
+      "version": "6.7.5",
+      "license": "BSD-3-Clause",
+      "notices": [
+        {
+          "path": "notices/pypdf-LICENSE",
+          "sha256": "a97ac230e5f33ef10a5367a850eb01f91f1a0b064e34742c7794d2294557f524"
+        }
+      ]
+    },
+    {
+      "name": "pytest",
+      "version": "9.0.2",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "notices/pytest-LICENSE",
+          "sha256": "ca836a5f9ecca3b2f350230faa20a48fb8b145653b5568d784862df864706b9b"
+        }
+      ]
+    },
+    {
+      "name": "rendercv",
+      "version": "2.8",
+      "license": "MIT",
+      "notices": []
+    },
+    {
+      "name": "rendercv-fonts",
+      "version": "0.5.1",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "notices/rendercv-fonts-LICENSE",
+          "sha256": "cc0e27dadbb5700415785f57d9cd7dbec6a297d1ea00ed8b017cfa29dedbdd60"
+        }
+      ]
+    },
+    {
+      "name": "rich",
+      "version": "15.0.0",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "notices/rich-LICENSE",
+          "sha256": "deed7c17a4318158190a3ea239cc879a5a50271cebb98ae7025f48fbe58dca15"
+        }
+      ]
+    },
+    {
+      "name": "ruamel.yaml",
+      "version": "0.19.1",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "notices/ruamel-yaml-LICENSE",
+          "sha256": "3e7632bb0dc1150f15f8161f5eec48dec8a99aaa1dfc9e8f63c02931e0fba7f8"
+        }
+      ]
+    },
+    {
+      "name": "shellingham",
+      "version": "1.5.4",
+      "license": "ISC License",
+      "notices": [
+        {
+          "path": "notices/shellingham-LICENSE",
+          "sha256": "f388fd38cad13112c1dc0f669bbe80e7f84541edbafb72f3030d2ca7642c3c9d"
+        }
+      ]
+    },
+    {
+      "name": "soupsieve",
+      "version": "2.10",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "notices/soupsieve-LICENSE.md",
+          "sha256": "76a0acdb98c3a63681e20b6f096699ef8cad5fb35d56eef8387e0fa71d797a9a"
+        }
+      ]
+    },
+    {
+      "name": "typer",
+      "version": "0.27.2",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "notices/typer-LICENSE",
+          "sha256": "58992cebcf8dfb6e40c4e2112ed12126c243666dca3912a3d78b7ecac4859d49"
+        }
+      ]
+    },
+    {
+      "name": "typing-inspection",
+      "version": "0.4.4",
+      "license": "MIT",
+      "notices": [
+        {
+          "path": "notices/typing-inspection-LICENSE",
+          "sha256": "804b59b25f2c31bd278f9202a19ae49a3945aa2664387e2d0a128c7cacc61ec3"
+        }
+      ]
+    },
+    {
+      "name": "typing_extensions",
+      "version": "4.16.0",
+      "license": "PSF-2.0",
+      "notices": [
+        {
+          "path": "notices/typing_extensions-LICENSE",
+          "sha256": "3b2f81fe21d181c499c59a256c8e1968455d6689d269aa85373bfb6af41da3bf"
+        }
+      ]
+    },
+    {
+      "name": "typst",
+      "version": "0.15.0",
+      "license": "Apache-2.0",
+      "notices": [
+        {
+          "path": "notices/typst-LICENSE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+        }
+      ]
+    },
+    {
+      "name": "watchdog",
+      "version": "6.0.0",
+      "license": "Apache-2.0",
+      "notices": [
+        {
+          "path": "notices/watchdog-COPYING",
+          "sha256": "39f081828db6f94c70123fa4fb30c1bce3e215a8fdece53a49991fe076a69c08"
+        },
+        {
+          "path": "notices/watchdog-LICENSE",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        }
+      ]
+    }
+  ],
+  "fontFamilies": [
+    {
+      "family": "EB Garamond",
+      "enabled": false,
+      "notices": [
+        {
+          "path": "notices/font-EB-Garamond-OFL.txt",
+          "sha256": "b921242b4a54e7dbb2744fd44cc008f8b421d0585f8b902360a9300e00cb48b8"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "family": "Font Awesome 7",
+      "enabled": true,
+      "notices": [
+        {
+          "path": "notices/font-Font-Awesome-7-LICENSE.txt",
+          "sha256": "329f24fdba0c57714d7d202d30a74767feac6907685ee24f0abbf1bd47581a07"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "family": "Fontin",
+      "enabled": false,
+      "notices": [],
+      "notes": "No separate notice in installed distribution; this font is not selected or redistributed by JobPilot."
+    },
+    {
+      "family": "Gentium Book Plus",
+      "enabled": false,
+      "notices": [
+        {
+          "path": "notices/font-Gentium-Book-Plus-OFL.txt",
+          "sha256": "404b5f7ce80de86f1f045290c8c6681021562faa2c8b054418e263e83d042212"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "family": "Lato",
+      "enabled": false,
+      "notices": [
+        {
+          "path": "notices/font-Lato-OFL.txt",
+          "sha256": "65688bc4c177d92b13c662a3d7defa72e4a632b6d997a5878e29f5e012ea142d"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "family": "Mukta",
+      "enabled": false,
+      "notices": [
+        {
+          "path": "notices/font-Mukta-OFL.txt",
+          "sha256": "95c78033894177987e1415c3f2fd05fc423932dab4bc6113876836f991146d23"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "family": "Noto Sans",
+      "enabled": true,
+      "notices": [
+        {
+          "path": "notices/font-Noto-Sans-OFL-JP,-KR,-SC.txt",
+          "sha256": "89fcb7c3bdcfafb48be9a4428f4e9f4fdbb914b8d491dc3545121715aa3d211b"
+        },
+        {
+          "path": "notices/font-Noto-Sans-OFL.txt",
+          "sha256": "4bcd2048d7290dab388dae758e5b2f9a1cc66822e619257d4372ad9e5087ef70"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "family": "Open Sans",
+      "enabled": false,
+      "notices": [
+        {
+          "path": "notices/font-Open-Sans-OFL.txt",
+          "sha256": "9f0a8899914f5f8644db2d02ef80690bfd391080d9ea7f9de5c0d869bf867934"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "family": "Open Sauce Sans",
+      "enabled": false,
+      "notices": [
+        {
+          "path": "notices/font-Open-Sauce-Sans-OFL.txt",
+          "sha256": "a526c5c114a4f0b6e65a6780d3378eb4accda3cacdb65d9cc9a8fbc14077ed51"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "family": "Poppins",
+      "enabled": false,
+      "notices": [
+        {
+          "path": "notices/font-Poppins-OFL.txt",
+          "sha256": "3f51dafada8ad6690a737acb15dcc2dc961b0cbc7de92791611e480e03167825"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "family": "Raleway",
+      "enabled": false,
+      "notices": [
+        {
+          "path": "notices/font-Raleway-OFL.txt",
+          "sha256": "378db2d5645543913dc9f21c9a3da08202fbe259f1772128af3a40a47cb8cec7"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "family": "Roboto",
+      "enabled": false,
+      "notices": [
+        {
+          "path": "notices/font-Roboto-LICENSE.txt",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "family": "Source Sans 3",
+      "enabled": true,
+      "notices": [
+        {
+          "path": "notices/font-Source-Sans-3-OFL.txt",
+          "sha256": "8b121aabc7cb37668d0407128fdcaf31206abc8154cc06b78642c3efb84c5754"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "family": "Ubuntu",
+      "enabled": false,
+      "notices": [
+        {
+          "path": "notices/font-Ubuntu-UFL.txt",
+          "sha256": "2f0015108d68627bd788d313f529c21ff4da2c2c42a5e1f3883acc83480f9002"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "family": "XCharter",
+      "enabled": false,
+      "notices": [
+        {
+          "path": "notices/font-XCharter-README",
+          "sha256": "9cee8d6ba70e157803d2b6cdded58b6593c86941800b352a5a2f1d90ed34bd01"
+        }
+      ],
+      "notes": ""
+    }
+  ],
+  "bundledTypst": {
+    "name": "rendercv",
+    "version": "0.3.0",
+    "license": "MIT",
+    "metadataPath": "rendercv/renderer/rendercv_typst/typst.toml",
+    "source": "https://github.com/rendercv/rendercv"
+  }
+}

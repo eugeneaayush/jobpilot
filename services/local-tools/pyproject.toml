@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jobpilot-local-tools"
+version = "1.0.0"
+description = "Bounded private JobPilot computations and document artifacts"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "beautifulsoup4==4.14.3",
+  "httpx==0.28.1",
+  "jobpilot-jobspy==1.0.0",
+  "pydantic==2.12.5",
+  "pypdf==6.7.5",
+  "rendercv[full]==2.8",
+  "ruamel.yaml==0.19.1",
+]
+
+[dependency-groups]
+dev = ["pytest==9.0.2"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/jobpilot_local_tools"]
+
+[tool.uv.sources]
+jobpilot-jobspy = { path = "../../vendor/jobspy" }

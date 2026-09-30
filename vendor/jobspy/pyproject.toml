@@ -1,0 +1,11 @@
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+[project]
+name = "jobpilot-jobspy"
+version = "1.0.0"
+requires-python = ">=3.12,<3.13"
+license = "MIT"
+dependencies = ["beautifulsoup4==4.14.3"]
+[tool.hatch.build.targets.wheel]
+packages = ["src/jobpilot_jobspy"]

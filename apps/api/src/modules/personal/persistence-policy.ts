@@ -11,6 +11,7 @@ import { conflict } from "@/common/errors";
 const policySchema = z.object({
   enabled: z.literal(true),
   mode: z.enum(PERSONAL_ATTEMPT_MODES),
+  approvalPolicy: z.literal("per-application-v1").optional(),
   dailyCap: z.number().int().positive().max(1000),
   maxApplications: z.number().int().positive().max(10000),
   timezone: z.string().min(1),
@@ -23,6 +24,13 @@ const policySchema = z.object({
 export function readAttemptPolicy(config: unknown) {
   const parsed = z.object({ personal: policySchema }).safeParse(config);
   if (!parsed.success) throw conflict("An explicit enabled personal campaign policy is required.");
+  if (
+    parsed.data.personal.mode !== "offline" &&
+    parsed.data.personal.approvalPolicy !== "per-application-v1"
+  )
+    throw conflict(
+      "Live campaigns require per-application approval; migrate and relaunch the campaign",
+    );
   if (
     parsed.data.personal.roleScope &&
     (!parsed.data.personal.tracks || !parsed.data.personal.sources)

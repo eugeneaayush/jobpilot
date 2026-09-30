@@ -109,6 +109,8 @@ async function fixture() {
         identity: manifest.identity,
         requisitionId: "123",
       });
+    if (url.pathname.endsWith("/authorize-transmission"))
+      return Response.json({ status: "authorized" });
     throw new Error("Unexpected synthetic API request");
   }) as typeof fetch;
   const brokers: PersonalBrowserBroker[] = [];

@@ -477,7 +477,7 @@ export function validateGreenhouseUpload(
 }
 
 export interface GreenhouseFinalContext {
-  fields: Record<string, string | boolean>;
+  fields: Record<string, string | boolean | string[]>;
   uploads: readonly GreenhouseUploadedFile[];
   timeZone: string;
   /** Supplied only after the driver verifies the approved country's observed dialing code. */
@@ -673,7 +673,11 @@ export function validateGreenhouseFinalRequest(
     }
     if (question.name === "resume_text" || question.name === "cover_letter_text") continue;
     const value = fields[question.name];
-    if (question.required && (value === undefined || value === "")) fail();
+    if (
+      question.required &&
+      (value === undefined || value === "" || (Array.isArray(value) && !value.length))
+    )
+      fail();
     const id = /^question_([0-9]+)(?:\[\])?$/.exec(question.name)?.[1];
     if (!id) continue;
     const answer: Record<string, unknown> = { question_id: id, priority: priority++ };
@@ -702,8 +706,38 @@ export function validateGreenhouseFinalRequest(
         }
       }
     } else if (question.type === "multi_value_multi_select") {
-      if (value !== undefined && value !== "") fail();
-      answer.answer_selected_options_attributes = {};
+      const approved = value ?? [];
+      if (
+        !Array.isArray(approved) ||
+        approved.length > 50 ||
+        new Set(approved).size !== approved.length
+      )
+        fail();
+      const choices = identity.choices[question.name] ?? [];
+      if (
+        approved.some(
+          (selected) => choices.filter((choice) => choice.value === selected).length !== 1,
+        )
+      )
+        fail();
+      const received = object(
+        object(object(object(body.job_application).answers_attributes)[id])
+          .answer_selected_options_attributes,
+      );
+      const selected: Record<string, { question_option_id: string | number }> = {};
+      const retained = new Set<string>();
+      for (let index = 0; index < approved.length; index++) {
+        const optionId = object(received[String(index)]).question_option_id;
+        if (
+          (typeof optionId !== "string" && typeof optionId !== "number") ||
+          !approved.includes(String(optionId)) ||
+          retained.has(String(optionId))
+        )
+          fail();
+        retained.add(String(optionId));
+        selected[String(index)] = { question_option_id: optionId };
+      }
+      answer.answer_selected_options_attributes = selected;
     } else fail();
     object(expected.answers_attributes)[id] = answer;
   }

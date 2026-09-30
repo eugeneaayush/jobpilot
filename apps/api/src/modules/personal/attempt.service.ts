@@ -1,9 +1,12 @@
+import { join } from "node:path";
 import { applicationEmailTransportFreezeSchema } from "@jobpilot/contracts/personal-application-email";
+import type { PersonalApprovalReceipt } from "@jobpilot/contracts/personal-approval";
 import type {
   PersonalAttemptLeaseInput,
   PersonalAttemptStartInput,
   PersonalReceiptEvidence,
 } from "@jobpilot/contracts/personal-attempt";
+import { personalDocumentVerificationSchema } from "@jobpilot/contracts/personal-local-tools";
 import { resumeDataSchema } from "@jobpilot/contracts/resume";
 import { singleton } from "tsyringe";
 import { z } from "zod";
@@ -11,12 +14,16 @@ import { conflict, notFound } from "@/common/errors";
 import { type PersonalAttempt, type Prisma, PrismaClient } from "@/generated/prisma/client";
 import { canonicalizeJobUrl } from "@/modules/application/job-url";
 import { prepareApplicationEmail } from "./application-email/policy";
+import { buildApprovalPacket } from "./approval-packet";
+import { activeApproval, approvalHistory, requireApprovalReceipt } from "./approval-policy";
 import { verifyAttachmentManifest } from "./attachments-policy";
 import { recordScopeParkReason } from "./campaign-policy";
 import { validateChallengeAcceptance } from "./challenge-policy";
 import { eligibilityFreshness } from "./eligibility-freshness";
 import { verifyRecruitingConstraints } from "./graduate-eligibility-policy";
 import { seniorityParkReason } from "./graduate-policy";
+import { documentPipelineMatches, verifierPipelineMatches } from "./local-tools/pipeline-config";
+import { verifyRendererMapping } from "./local-tools/renderer-mapping";
 import {
   manifestHash,
   policyDay,
@@ -27,7 +34,7 @@ import {
   verifyPrivateArtifact,
 } from "./persistence-policy";
 import { activeRecoveryRevision, recoveryContext, sameRecoveryContext } from "./recovery-policy";
-import { objectValue, readSettings, sha256 } from "./runtime";
+import { jsonValue, objectValue, readSettings, sha256 } from "./runtime";
 import { validateManifestScreeningSources } from "./screening-provenance";
 import { employerIdentity, enforceEmployerCap, userPolicy } from "./user-policy";
 
@@ -42,7 +49,7 @@ const RESERVED_STATES = [
 ] as const;
 const submitManifestSchema = z.object({
   recordId: z.uuid(),
-  previewMode: z.literal("submit"),
+  previewMode: z.enum(["submit", "live_preview"]),
   document: z.object({ path: z.string(), sha256: z.string().regex(/^[a-f0-9]{64}$/) }),
   resumeEvidenceId: z.uuid(),
   sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
@@ -111,6 +118,7 @@ export class PersonalAttemptService {
       if (!attempt) return null;
       this.requireLease(attempt, attempt);
       await this.verifyDocument(userId, attempt.manifest);
+      await this.verifyLiveApproval(tx, userId, attempt);
       if (attempt.mode === "submit")
         await this.verifyManifest(tx, userId, attempt.recordId, attempt.manifest);
       return attempt;
@@ -185,6 +193,19 @@ export class PersonalAttemptService {
         await this.verifyManifest(tx, userId, record.id, input.manifest);
       } else {
         await this.verifyDocument(userId, input.manifest);
+      }
+      let applicationApproval: PersonalApprovalReceipt | undefined;
+      if (input.mode !== "offline") {
+        const packet = await buildApprovalPacket(tx, userId, record, campaign);
+        await this.verifyManifest(tx, userId, record.id, packet.preparedManifest);
+        if (manifestHash(input.manifest) !== manifestHash(packet.preparedManifest))
+          throw conflict("Attempt manifest differs from the exact reviewed application packet");
+        applicationApproval = activeApproval(
+          approvalHistory(objectValue(record.details)),
+          manifestHash(packet),
+          input.campaignId,
+          packet.campaignRunId,
+        );
       }
       const url = canonicalizeJobUrl(record.url);
       if (
@@ -274,6 +295,7 @@ export class PersonalAttemptService {
         typeof posting.contentHash === "string" ? posting.contentHash : manifestHash(posting);
       const manifest = {
         ...input.manifest,
+        ...(applicationApproval && { applicationApproval }),
         applicationEmailHash:
           objectValue(objectValue(record.details).applicationEmail).payloadHash ?? null,
         userPolicyHash: manifestHash(globalPolicy),
@@ -284,8 +306,31 @@ export class PersonalAttemptService {
         canonicalUrl: url,
         ...requisition,
       };
+      const attemptId = crypto.randomUUID();
+      if (applicationApproval) {
+        const details = objectValue(record.details);
+        const bound = await tx.personalRecord.updateMany({
+          where: { id: record.id, userId, updatedAt: record.updatedAt },
+          data: {
+            details: jsonValue({
+              ...details,
+              applicationApprovals: [
+                ...approvalHistory(details),
+                {
+                  kind: "bound",
+                  approvalId: applicationApproval.id,
+                  attemptId,
+                  at: new Date().toISOString(),
+                },
+              ],
+            }),
+          },
+        });
+        if (bound.count !== 1) throw conflict("Application changed before approval binding");
+      }
       const attempt = await tx.personalAttempt.create({
         data: {
+          id: attemptId,
           recordId: record.id,
           userId,
           campaignId: input.campaignId,
@@ -305,12 +350,34 @@ export class PersonalAttemptService {
     });
   }
 
+  async authorizeTransmission(userId: string, id: string, lease: PersonalAttemptLeaseInput) {
+    return this.locked(userId, async (tx) => {
+      const attempt = await this.owned(tx, userId, id);
+      this.requireLease(attempt, lease);
+      if (
+        attempt.mode === "offline" ||
+        !["preparing", "prepared", "submitting"].includes(attempt.state)
+      )
+        throw conflict("Live transmission authority is not active");
+      await this.verifyLiveApproval(tx, userId, attempt);
+      if (attempt.state === "submitting") {
+        await this.verifyContinuationManifest(tx, userId, attempt);
+        return attempt;
+      }
+      return tx.personalAttempt.update({
+        where: { id },
+        data: { leaseExpiresAt: new Date(Date.now() + LEASE_MS) },
+      });
+    });
+  }
+
   async checkpoint(userId: string, id: string, lease: PersonalAttemptLeaseInput) {
     return this.locked(userId, async (tx) => {
       const attempt = await this.owned(tx, userId, id);
       this.requireLease(attempt, lease);
       if (!["preparing", "prepared"].includes(attempt.state))
         throw conflict("Only preparation leases can be renewed; reconcile any submission.");
+      await this.verifyLiveApproval(tx, userId, attempt);
       return tx.personalAttempt.update({
         where: { id },
         data: { leaseExpiresAt: new Date(Date.now() + LEASE_MS) },
@@ -324,6 +391,7 @@ export class PersonalAttemptService {
       this.requireLease(attempt, lease);
       if (!["preparing", "prepared"].includes(attempt.state))
         throw conflict("Attempt cannot be prepared in this state.");
+      await this.verifyLiveApproval(tx, userId, attempt);
       if (attempt.mode === "submit")
         await this.verifyManifest(tx, userId, attempt.recordId, attempt.manifest);
       else await this.verifyDocument(userId, attempt.manifest);
@@ -359,6 +427,7 @@ export class PersonalAttemptService {
         throw conflict("Email bytes must be frozen on a prepared pre-submit attempt");
       if (objectValue(attempt.receipt).emailTransport)
         throw conflict("Email transport is already frozen");
+      await this.verifyLiveApproval(tx, userId, attempt);
       await this.verifyManifest(tx, userId, attempt.recordId, attempt.manifest);
       const record = await tx.personalRecord.findFirstOrThrow({
         where: { id: attempt.recordId, userId },
@@ -389,6 +458,7 @@ export class PersonalAttemptService {
     return this.locked(userId, async (tx) => {
       const attempt = await this.owned(tx, userId, id);
       this.requireLease(attempt, lease);
+      await this.verifyLiveApproval(tx, userId, attempt);
       if (attempt.mode !== "submit" || attempt.state !== "prepared")
         throw conflict(
           "Only a prepared submit attempt may begin submission; submission attempts are never retried automatically.",
@@ -750,6 +820,7 @@ export class PersonalAttemptService {
       manifestHash(attempt.manifest) !== attempt.manifestHash
     )
       throw conflict("Continuation requires the original unresolved submit attempt.");
+    await this.verifyLiveApproval(tx, userId, attempt);
     const campaign = await tx.campaign.findFirst({
       where: { userId, campaignId: attempt.campaignId, status: "in_progress" },
     });
@@ -800,6 +871,43 @@ export class PersonalAttemptService {
     });
     if (!reservation) throw conflict("Submission reservation is unavailable.");
     await this.verifyManifest(tx, userId, attempt.recordId, attempt.manifest);
+  }
+
+  async verifyApprovalReadiness(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    recordId: string,
+    manifest: unknown,
+  ) {
+    return this.verifyManifest(tx, userId, recordId, manifest);
+  }
+
+  async verifyLiveApproval(tx: Prisma.TransactionClient, userId: string, attempt: PersonalAttempt) {
+    if (attempt.mode === "offline") return;
+    const campaign = await tx.campaign.findFirst({
+      where: { userId, campaignId: attempt.campaignId },
+    });
+    const record = await tx.personalRecord.findFirst({ where: { userId, id: attempt.recordId } });
+    if (!campaign || !record) throw conflict("Application approval context is unavailable");
+    const packet = await buildApprovalPacket(tx, userId, record, campaign);
+    const receipt = activeApproval(
+      approvalHistory(objectValue(record.details)),
+      manifestHash(packet),
+      attempt.campaignId,
+      packet.campaignRunId,
+      attempt.id,
+    );
+    requireApprovalReceipt(objectValue(attempt.manifest).applicationApproval, receipt);
+    const packetBytes = await readPrivateArtifact(
+      receipt.packetArtifact.path,
+      privateArtifactRoot(userId),
+    );
+    if (
+      sha256(packetBytes) !== receipt.packetArtifact.sha256 ||
+      manifestHash(JSON.parse(packetBytes.toString())) !== receipt.packetHash
+    )
+      throw conflict("Immutable reviewed application packet is unavailable or changed");
+    await this.verifyManifest(tx, userId, record.id, packet.preparedManifest);
   }
 
   private async verifyManifest(
@@ -872,6 +980,40 @@ export class PersonalAttemptService {
         }),
       })
       .safeParse(record?.details);
+    const verified = personalDocumentVerificationSchema.safeParse(
+      objectValue(record.details).documentVerification,
+    );
+    const document = objectValue(objectValue(record.details).document);
+    const renderer = settings.resumeRenderer ?? "cbs-letter-times";
+    await verifyPrivateArtifact(
+      parsed.data.document.path,
+      parsed.data.document.sha256,
+      privateArtifactRoot(userId),
+    );
+    if (
+      !documentPipelineMatches(document, renderer) ||
+      document.sha256 !== parsed.data.document.sha256 ||
+      document.path !== parsed.data.document.path
+    )
+      throw conflict(
+        "Current renderer configuration is required; regenerate and review this document",
+      );
+    await verifyRendererMapping(document, privateArtifactRoot(userId));
+    if (
+      !verified.success ||
+      verified.data.status !== "passed" ||
+      !verifierPipelineMatches(verified.data, renderer) ||
+      verified.data.artifactSha256 !== parsed.data.document.sha256
+    )
+      throw conflict(
+        "Current deterministic document verification is required before live transmission",
+      );
+    const reportHash = sha256(JSON.stringify(verified.data, null, 2));
+    await verifyPrivateArtifact(
+      join(privateArtifactRoot(userId), "document-checks", `${reportHash}.json`),
+      reportHash,
+      privateArtifactRoot(userId),
+    );
     const resumeReady = z
       .object({ conflicts: z.array(z.string()).length(0) })
       .safeParse(evidence.details);
@@ -886,11 +1028,6 @@ export class PersonalAttemptService {
       throw conflict("Recruiting settings changed after preparation; prepare a new attempt.");
     const freshness = eligibilityFreshness(record, { settings, evidence });
     if (freshness.status !== "current") throw conflict(freshness.reason!);
-    await verifyPrivateArtifact(
-      parsed.data.document.path,
-      parsed.data.document.sha256,
-      privateArtifactRoot(userId),
-    );
   }
 
   private async recordEvidence(

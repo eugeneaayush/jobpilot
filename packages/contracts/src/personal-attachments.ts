@@ -1,4 +1,5 @@
 import { z } from "zod/v4";
+import { personalDocumentVerificationSchema } from "./personal-local-tools";
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
 const personalAttachmentRequirementSchema = z.object({
@@ -41,6 +42,18 @@ export const personalAttachmentSchema = personalAttachmentRequirementSchema.exte
     citations: z.array(z.object({ pointer: z.string().startsWith("/"), value: z.string() })).min(1),
   }),
   review: personalAttachmentReviewSchema.nullable(),
+  verification: personalDocumentVerificationSchema.optional(),
+  pipeline: z
+    .object({
+      documentPipelineVersion: z.string(),
+      renderer: z.literal("cbs-cover-letter"),
+      rendererVersion: z.string(),
+      rendererConfigHash: hash,
+      verifierVersion: z.literal("1"),
+      verifierConfigHash: hash,
+    })
+    .strict()
+    .optional(),
 });
 export const personalCoverLetterInputSchema = z
   .object({

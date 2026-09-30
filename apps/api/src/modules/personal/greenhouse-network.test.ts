@@ -436,6 +436,51 @@ describe("Greenhouse final application guard", () => {
   });
 });
 
+describe("Greenhouse complete selection wire audit", () => {
+  function multiselectFixture() {
+    const f = fixture();
+    f.identity.questions.find((question) => question.name === "question_42")!.type =
+      "multi_value_multi_select";
+    f.identity.choices.question_42 = [
+      { value: "901", label: "Research" },
+      { value: "902", label: "Trading" },
+    ];
+    f.context.fields.question_42 = ["901", "902"];
+    const answers = f.body.job_application.answers_attributes as Record<
+      string,
+      Record<string, unknown>
+    >;
+    answers["42"] = {
+      question_id: "42",
+      priority: 0,
+      answer_selected_options_attributes: {
+        "0": { question_option_id: 902 },
+        "1": { question_option_id: "901" },
+      },
+    };
+    return f;
+  }
+  test("accepts every approved option exactly once regardless of form order", () => {
+    const { identity, context, body } = multiselectFixture();
+    expect(() => validateGreenhouseFinalRequest(body, identity, context)).not.toThrow();
+  });
+  test("rejects omitted, duplicated, unapproved and extra wire selections", () => {
+    for (const values of [["901"], ["901", "901"], ["901", "999"], ["901", "902", "999"]]) {
+      const { identity, context, body } = multiselectFixture();
+      const answers = body.job_application.answers_attributes as Record<
+        string,
+        Record<string, unknown>
+      >;
+      answers["42"]!.answer_selected_options_attributes = Object.fromEntries(
+        values.map((value, index) => [String(index), { question_option_id: value }]),
+      );
+      expect(() => validateGreenhouseFinalRequest(body, identity, context)).toThrow(
+        "approved scope",
+      );
+    }
+  });
+});
+
 describe("Greenhouse response evidence", () => {
   test.each([
     "captcha-failed",

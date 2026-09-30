@@ -18,6 +18,8 @@ import {
   eligibilityRefreshClaimed,
 } from "./eligibility-freshness";
 import { type CandidateFacts, evaluatePosting } from "./evaluation";
+import { campaignKeywords } from "./fit-evaluation";
+import { requireFullDiscoveryDescriptions } from "./leads/lead-policy";
 import { manifestHash } from "./persistence-policy";
 import { PersonalService } from "./personal.service";
 import {
@@ -98,6 +100,7 @@ export class PersonalDiscoveryService {
         employer: input.employer,
         fetch: authorizedFetch,
       });
+    requireFullDiscoveryDescriptions(result);
     const run = await this.prisma.personalDiscoveryRun.create({
       data: {
         userId,
@@ -150,25 +153,7 @@ export class PersonalDiscoveryService {
       ...(settings.availableUntil !== null && { availabilityEnd: settings.availableUntil }),
       ...(settings.availabilityNotes !== null && { availabilityNotes: settings.availabilityNotes }),
     };
-    const sourceSkills = resume.sections.flatMap((section) =>
-      section.entries
-        .filter((entry) => /^skills$/i.test(entry.heading))
-        .flatMap((entry) =>
-          [entry.subheading ?? "", ...entry.bullets].flatMap((text) =>
-            text
-              .split(/[,;]/)
-              .map((word) => word.trim())
-              .filter(Boolean),
-          ),
-        ),
-    );
-    const keywords = [
-      ...new Set([
-        ...settings.targetFunctions,
-        ...resume.skills.flatMap((group) => group.items),
-        ...sourceSkills,
-      ]),
-    ];
+    const keywords = campaignKeywords(resume, settings);
     const settingsHash = manifestHash(settings);
     const existing = await this.prisma.personalRecord.findMany({
       where: { userId, identity: { startsWith: `${sourceIdentity}:` } },
@@ -241,6 +226,7 @@ export class PersonalDiscoveryService {
                   screeningAnswerSnapshots: oldDetails.screeningAnswerSnapshots,
                 }
               : {}),
+            applicationApprovals: oldDetails.applicationApprovals ?? [],
             eligibilityAdjudicationHistory: oldDetails.eligibilityAdjudicationHistory ?? [],
             recoveryHistory: oldDetails.recoveryHistory ?? [],
             handoffHistory: [
@@ -289,6 +275,7 @@ export class PersonalDiscoveryService {
             },
             fitScore: evaluation.fitScore,
             fitReasons: evaluation.fitReasons,
+            fitEvaluation: evaluation.fitEvaluation,
             missingAnswers: evaluation.requirements
               .filter((requirement) => requirement.status === "unknown")
               .map((requirement) => requirement.requirement),

@@ -116,7 +116,7 @@ describe.skipIf(!testUrl)("personal screening answer snapshots", () => {
   });
 
   it("rejects unknown settings, stale hashes, ungrounded values and stale updates", async () => {
-    const f = await personalFixture(db);
+    const f = await personalFixture(db, "submit", 3, false);
     f.settings.citizenship = null;
     await writeFile(join(db.root, "settings", `${f.user.id}.json`), JSON.stringify(f.settings));
     const { record } = await f.record();
@@ -252,6 +252,20 @@ describe.skipIf(!testUrl)("personal screening answer snapshots", () => {
         ],
       },
       { label: "SQL experience", required: true, fields: [{ name: "sql", type: "input_text" }] },
+      {
+        label: "Preferred teams",
+        required: true,
+        fields: [
+          {
+            name: "question_42",
+            type: "multi_value_multi_select",
+            values: [
+              { value: 901, label: "Research" },
+              { value: 902, label: "Trading" },
+            ],
+          },
+        ],
+      },
     ];
     const inventory = objectValue(objectValue(record.details).attachmentRequirements);
     async function store(id = record.requisitionId, changes: Record<string, unknown> = {}) {
@@ -278,9 +292,38 @@ describe.skipIf(!testUrl)("personal screening answer snapshots", () => {
       return file;
     }
     const file = await store();
-    expect((await service.answers(f.user.id, record.id)).questions).toEqual([
+    const packet = await service.answers(f.user.id, record.id);
+    expect(packet.questions).toEqual([
       { fieldName: "sql", label: "SQL experience", type: "input_text", required: true },
+      {
+        fieldName: "question_42",
+        label: "Preferred teams",
+        type: "multi_value_multi_select",
+        required: true,
+        multiple: true,
+        options: [
+          { value: "901", label: "Research" },
+          { value: "902", label: "Trading" },
+        ],
+      },
     ]);
+    const answer = {
+      key: "teams",
+      fieldName: "question_42",
+      value: ["901", "902"],
+      source: { kind: "explicit_user" as const, confirmed: true as const },
+    };
+    await expect(
+      service.saveAnswers(f.user.id, record.id, {
+        expectedUpdatedAt: packet.updatedAt.toISOString(),
+        answers: [{ ...answer, value: ["Research"] }],
+      }),
+    ).rejects.toThrow("option inventory");
+    const saved = await service.saveAnswers(f.user.id, record.id, {
+      expectedUpdatedAt: packet.updatedAt.toISOString(),
+      answers: [answer],
+    });
+    expect(saved.snapshot.answers[0]?.value).toEqual(["901", "902"]);
     await writeFile(file, "tampered");
     await expect(service.answers(f.user.id, record.id)).rejects.toThrow("hash mismatch");
     await store("different-requisition");
@@ -407,8 +450,14 @@ describe.skipIf(!testUrl)("personal screening answer snapshots", () => {
       expectedUpdatedAt: current.updatedAt.toISOString(),
       answers: [
         ...known,
-        { key: "wrong_key", label: "Broker dealer affiliation", value: "No", source: explicit },
-        { key: "government_service", fieldName: "wrong_field", value: false, source: explicit },
+        { key: "unique_label", label: "Broker dealer affiliation", value: "No", source: explicit },
+        {
+          key: "government_service",
+          fieldName: "wrong_field",
+          label: "Government service",
+          value: false,
+          source: explicit,
+        },
       ],
     });
     const missing = async () =>
@@ -418,7 +467,6 @@ describe.skipIf(!testUrl)("personal screening answer snapshots", () => {
     expect(await missing()).toEqual([
       "Graduation cohort",
       "Pending manual review",
-      "Broker dealer affiliation",
       "Government service",
     ]);
     expect(first.questions.some((question) => question.fieldName === "resume_text")).toBe(false);
@@ -426,14 +474,27 @@ describe.skipIf(!testUrl)("personal screening answer snapshots", () => {
       expectedUpdatedAt: first.updatedAt.toISOString(),
       answers: [
         ...known,
-        { key: "broker_affiliation", value: false, source: explicit },
+        {
+          key: "broker_affiliation",
+          fieldName: "broker_affiliation",
+          value: false,
+          source: explicit,
+        },
         { key: "government", fieldName: "government_service", value: false, source: explicit },
       ],
     });
     expect(await missing()).toEqual(["Graduation cohort", "Pending manual review"]);
     await service.saveAnswers(f.user.id, record.id, {
       expectedUpdatedAt: second.updatedAt.toISOString(),
-      answers: [...known, { key: "broker_affiliation", value: " ", source: explicit }],
+      answers: [
+        ...known,
+        {
+          key: "broker_affiliation",
+          fieldName: "broker_affiliation",
+          value: " ",
+          source: explicit,
+        },
+      ],
     });
     expect(await missing()).toEqual([
       "Graduation cohort",

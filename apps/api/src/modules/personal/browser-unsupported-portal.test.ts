@@ -81,6 +81,8 @@ async function fixture(
             identity: manifest.identity,
             requisitionId: "123",
           });
+        if (url.pathname.endsWith("/authorize-transmission"))
+          return Response.json({ status: "authorized" });
         if (url.pathname.endsWith("/park")) {
           parks.push((await request.json()) as (typeof parks)[number]);
           state = "blocked";

@@ -1,9 +1,13 @@
 import type { PersonalSettings } from "@jobpilot/contracts/personal";
 import type { ResumeData } from "@jobpilot/contracts/resume";
 import type { PersonalRecord, PersonalResumeEvidence } from "@/generated/prisma/client";
-import { postingContentHash } from "./attachments-policy";
+import { documentPipelineInputs } from "./local-tools/pipeline-config";
 import { manifestHash } from "./persistence-policy";
-import { objectValue } from "./runtime";
+
+const object = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 
 export function preparationPreviewHash(
   record: Pick<PersonalRecord, "id" | "identity" | "details">,
@@ -11,9 +15,12 @@ export function preparationPreviewHash(
   evidence: Pick<PersonalResumeEvidence, "id" | "sourceHash" | "details">,
   data: ResumeData,
 ) {
-  const details = objectValue(record.details);
+  const details = object(record.details);
+  const posting = object(details.posting);
   return manifestHash({
-    posting: postingContentHash(record),
+    ...documentPipelineInputs(settings.resumeRenderer ?? "cbs-letter-times"),
+    documentEdits: details.documentEdits ?? null,
+    posting: typeof posting.contentHash === "string" ? posting.contentHash : manifestHash(posting),
     settings,
     evidence,
     data,

@@ -3,7 +3,11 @@ import { join } from "node:path";
 import { personalSourceIdentity } from "@jobpilot/contracts/personal-source";
 import { eligibilityContext } from "./eligibility-freshness";
 import { manifestHash } from "./persistence-policy";
-import type { PersonalTestDatabase, personalFixture } from "./persistence-test-fixtures";
+import {
+  type PersonalTestDatabase,
+  type personalFixture,
+  refreshPersonalFixtureApproval,
+} from "./persistence-test-fixtures";
 import { jsonValue, objectValue } from "./runtime";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
@@ -49,7 +53,12 @@ describe.skipIf(!testUrl)("graduate identity and policy submission regressions",
       data: {
         identity,
         company,
-        details: { ...details, posting, attachmentRequirements } as never,
+        details: {
+          ...details,
+          posting,
+          attachmentRequirements,
+          previewAttachments: { attachmentRequirements, attachments: [] },
+        } as never,
       },
     });
     r.record = await db.prisma.personalRecord.update({
@@ -65,7 +74,46 @@ describe.skipIf(!testUrl)("graduate identity and policy submission regressions",
       },
     });
     r.input.manifest.attachmentRequirements = attachmentRequirements;
+    Object.assign(r.input.manifest, { identity, postingContentHash: manifestHash(posting) });
+    const campaign = await db.prisma.campaign.findUniqueOrThrow({
+      where: { campaignId: f.campaign.campaignId },
+    });
+    const personal = objectValue(objectValue(campaign.config).personal);
+    const sources = objectValue(personal.sources);
+    await db.prisma.campaign.update({
+      where: { campaignId: campaign.campaignId },
+      data: {
+        config: jsonValue({
+          ...objectValue(campaign.config),
+          personal: {
+            ...personal,
+            sources: {
+              ...sources,
+              instances: [
+                ...(Array.isArray(sources.instances) ? sources.instances : []),
+                { source, boardToken, employer: company },
+              ],
+            },
+          },
+        }),
+      },
+    });
     return { ...r, sourceIdentity };
+  }
+  async function approve(
+    f: Fixture,
+    r: Awaited<ReturnType<typeof role>>,
+    campaignId = f.campaign.campaignId,
+  ) {
+    r.input.campaignId = campaignId;
+    const result = await refreshPersonalFixtureApproval(
+      db,
+      f.user.id,
+      r.record.id,
+      r.input.manifest,
+      campaignId,
+    );
+    Object.assign(r.input.manifest, result.packet!.preparedManifest);
   }
   async function alias(
     f: Fixture,
@@ -117,6 +165,8 @@ describe.skipIf(!testUrl)("graduate identity and policy submission regressions",
     const b = await role(f, "ashby", "Synthetic Capital LLC");
     await alias(f, a.sourceIdentity);
     await alias(f, b.sourceIdentity);
+    await approve(f, a);
+    await approve(f, b);
     const result = await Promise.allSettled([
       db.service.start(f.user.id, a.input),
       db.service.start(f.user.id, b.input),
@@ -131,6 +181,8 @@ describe.skipIf(!testUrl)("graduate identity and policy submission regressions",
     const b = await role(f, "ashby", "Synthetic Capital LLC");
     await alias(f, a.sourceIdentity);
     await alias(f, b.sourceIdentity);
+    await approve(f, a);
+    await approve(f, b);
     const prior = await db.service.start(f.user.id, a.input);
     await db.prisma.personalRecord.update({
       where: { id: a.record.id },
@@ -147,6 +199,8 @@ describe.skipIf(!testUrl)("graduate identity and policy submission regressions",
     const b = await role(f, "ashby", "Synthetic Capital");
     await alias(f, a.sourceIdentity, "domain:one.example.com");
     await alias(f, b.sourceIdentity, "domain:two.example.com");
+    await approve(f, a);
+    await approve(f, b);
     await db.service.start(f.user.id, a.input);
     await db.service.start(f.user.id, b.input);
     expect(await db.prisma.personalReservation.count({ where: { userId: f.user.id } })).toBe(2);
@@ -156,7 +210,12 @@ describe.skipIf(!testUrl)("graduate identity and policy submission regressions",
     const a = await role(f, "cbs", "Fund One", "class2028");
     const b = await role(f, "cbs", "Fund Two", "class2028");
     await alias(f, a.sourceIdentity, "domain:wrong.example.com");
-    await db.prisma.personalPolicy.create({ data: { userId: f.user.id, employerActiveCap: 1 } });
+    await db.prisma.personalPolicy.update({
+      where: { userId: f.user.id },
+      data: { employerActiveCap: 1 },
+    });
+    await approve(f, a);
+    await approve(f, b);
     await db.service.start(f.user.id, a.input);
     await db.service.start(f.user.id, b.input);
     expect(await db.prisma.personalReservation.count({ where: { userId: f.user.id } })).toBe(2);
@@ -191,6 +250,14 @@ describe.skipIf(!testUrl)("graduate identity and policy submission regressions",
     });
     const b = await role(f, "ashby", "Another Employer");
     b.input.campaignId = other.campaignId;
+    const scoped = await db.prisma.campaign.findUniqueOrThrow({
+      where: { campaignId: f.campaign.campaignId },
+    });
+    await db.prisma.campaign.update({
+      where: { campaignId: other.campaignId },
+      data: { config: scoped.config! },
+    });
+    await approve(f, b, other.campaignId);
     await expect(db.service.start(f.user.id, b.input)).rejects.toThrow("cap reached");
     expect(await db.prisma.personalAttempt.count({ where: { userId: f.user.id } })).toBe(50);
   });
@@ -201,11 +268,14 @@ describe.skipIf(!testUrl)("graduate identity and policy submission regressions",
     await db.service.prepare(f.user.id, attempt.id, attempt);
     await db.prisma.personalPolicy.update({ where: { userId: f.user.id }, data: { dailyCap: 1 } });
     await expect(db.service.beginSubmit(f.user.id, attempt.id, attempt)).rejects.toThrow(
-      "User policy changed",
+      "approval is stale",
     );
     expect((await db.service.get(f.user.id, attempt.id)).submitAt).toBeNull();
     const b = await role(f, "ashby", "Another Employer");
-    const config = objectValue(f.campaign.config);
+    const config = objectValue(
+      (await db.prisma.campaign.findUniqueOrThrow({ where: { campaignId: f.campaign.campaignId } }))
+        .config,
+    );
     await db.prisma.campaign.update({
       where: { campaignId: f.campaign.campaignId },
       data: {
@@ -215,6 +285,7 @@ describe.skipIf(!testUrl)("graduate identity and policy submission regressions",
         } as never,
       },
     });
+    await approve(f, b);
     await expect(db.service.start(f.user.id, b.input)).rejects.toThrow("authoritative user policy");
   });
   it("holds continuation if the user policy changes after submit intent", async () => {
@@ -232,7 +303,7 @@ describe.skipIf(!testUrl)("graduate identity and policy submission regressions",
     });
     await expect(
       db.prisma.$transaction((tx) => db.service.verifyContinuationManifest(tx, f.user.id, current)),
-    ).rejects.toThrow("User policy changed");
+    ).rejects.toThrow("approval is stale");
     expect((await db.service.get(f.user.id, attempt.id)).state).toBe("submitting");
   });
 });

@@ -250,8 +250,14 @@ export class PersonalPreparationService {
         const { reviewer: _reviewer, reviewedAt: _reviewedAt, ...review } = result.review;
         await this.tailoring.review(userId, recordId, review, result.review.reviewer);
       } else if (phase === "preview") {
-        await this.preview.preview(userId, recordId);
+        await this.preview.preview(userId, recordId, controller.signal);
       } else {
+        const documentCheck = await this.preview.verifyDocument(
+          userId,
+          recordId,
+          controller.signal,
+        );
+        await verify();
         const pdfHash = String(objectValue(context.details.preview).pdfHash);
         const bytes = new Uint8Array(
           await (await this.personal.pdf(userId, recordId)).arrayBuffer(),
@@ -262,6 +268,7 @@ export class PersonalPreparationService {
           pdfHash,
           maxPages: resumePageLimit(context.record),
           signal: controller.signal,
+          verifiedPageCount: documentCheck.pageCount ?? undefined,
         });
         const result = await this.renderReview(rendered, options);
         if (result.status !== "reviewed") throw conflict(result.reason);

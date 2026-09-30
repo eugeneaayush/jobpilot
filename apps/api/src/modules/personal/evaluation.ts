@@ -1,6 +1,8 @@
+import type { PersonalFitEvaluation } from "@jobpilot/contracts/personal-fit";
 import type { ResumeData } from "@jobpilot/contracts/resume";
 import { assessPostingDeadlines } from "./deadline-policy";
 import type { DiscoveredPosting } from "./discovery";
+import { buildFitEvaluation } from "./fit-evaluation";
 import { assessPostingSeniority, type PostingSeniorityAssessment } from "./seniority";
 import { jurisdictionWorkAuthorization } from "./work-authorization";
 
@@ -38,6 +40,7 @@ export interface EvaluationResult {
   requirements: RequirementAssessment[];
   fitScore: number;
   fitReasons: string[];
+  fitEvaluation: PersonalFitEvaluation;
   blockers: string[];
 }
 
@@ -428,12 +431,9 @@ export function evaluatePosting(
   if (requirements.some((requirement) => requirement.status === "unknown")) eligibility = "unknown";
   if (requirements.some((requirement) => requirement.status === "violated"))
     eligibility = "ineligible";
-  const corpus = JSON.stringify(resume).toLowerCase();
-  const requested = [
-    ...new Set((prefs.keywords ?? []).map((word) => word.trim().toLowerCase()).filter(Boolean)),
-  ];
-  const postingTerms = requested.filter((word) => text.toLowerCase().includes(word));
-  const matched = postingTerms.filter((word) => corpus.includes(word));
+  const fitEvaluation = buildFitEvaluation(posting, prefs, resume);
+  const postingTerms = fitEvaluation.postingTerms;
+  const matched = fitEvaluation.supportedByBase;
   let fitScore = 40;
   const fitReasons = [
     "Fit measures textual relevance separately from eligibility; no submission authority is inferred.",
@@ -469,6 +469,7 @@ export function evaluatePosting(
     requirements,
     fitScore: Math.min(100, fitScore),
     fitReasons,
+    fitEvaluation,
     blockers: [...new Set(blockers)],
   };
 }

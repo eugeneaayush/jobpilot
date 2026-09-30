@@ -2,6 +2,7 @@ import {
   type PersonalCampaign,
   personalCampaignCreateSchema,
 } from "@jobpilot/contracts/personal-campaign";
+import { personalScreeningValueSchema } from "@jobpilot/contracts/personal-readiness";
 import { personalSourceIdentity } from "@jobpilot/contracts/personal-source";
 import { z } from "zod";
 import { conflict } from "@/common/errors";
@@ -20,6 +21,7 @@ const campaignAuthorizationSchema = z.object({
 });
 const personalSchedulerPolicySchema = personalCampaignCreateSchema.extend({
   scheduler: z.literal("personal-campaign-v1"),
+  approvalPolicy: z.literal("per-application-v1"),
   enabled: z.boolean(),
   policyVersion: z.string(),
   authorization: campaignAuthorizationSchema.nullable(),
@@ -116,7 +118,7 @@ export function recordParkReason(
 const answersSchema = z.array(
   z.object({
     key: z.string().min(1),
-    value: z.union([z.string(), z.boolean()]),
+    value: personalScreeningValueSchema,
     fieldName: z.string().min(1).optional(),
     label: z.string().min(1).optional(),
   }),

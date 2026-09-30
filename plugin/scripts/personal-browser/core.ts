@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { chmod, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { basename, isAbsolute, join, relative } from "node:path";
 import type { BrowserContext, Page } from "@playwright/test";
+import type { PersonalScreeningAnswer } from "../../../packages/contracts/src/personal-readiness";
 import { saveBrokerDiagnostic } from "./diagnostics";
 
 export interface BrokerConfig {
@@ -15,7 +16,7 @@ export interface BrokerConfig {
 }
 interface Answer {
   key: string;
-  value: string | boolean;
+  value: PersonalScreeningAnswer["value"];
   fieldName?: string;
   label?: string;
 }
@@ -61,6 +62,8 @@ export interface Field {
   checked?: boolean;
   fileHashes?: string[];
   options: string[];
+  multiple?: boolean;
+  selectedValues?: string[];
 }
 export interface Snapshot {
   url: string;
@@ -93,10 +96,10 @@ export interface BrowserDriver {
   acceptsUrl?(url: string): boolean;
   submissionEvidence?(): TransportReceipt | undefined;
   confirmed?(): boolean;
-  answerMatches?(field: Field, value: string | boolean): boolean;
+  answerMatches?(field: Field, value: PersonalScreeningAnswer["value"]): boolean;
   open(url: string, profile: string): Promise<void>;
   snapshot(): Promise<Snapshot>;
-  fill(field: Field, value: string | boolean): Promise<void>;
+  fill(field: Field, value: PersonalScreeningAnswer["value"]): Promise<void>;
   upload(field: Field, path: string, bytes: Buffer): Promise<void>;
   submit(): Promise<void>;
   close(): Promise<void>;
@@ -129,6 +132,11 @@ function safeUrl(value: string): string {
 const uuid = /^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i;
 
 export class PlaywrightDriver implements BrowserDriver {
+  private scope?: DriverScope;
+  private transmitting = false;
+  configure(scope: DriverScope) {
+    this.scope = scope;
+  }
   private context?: BrowserContext;
   private page?: Page;
   private origin = "";
@@ -186,6 +194,11 @@ export class PlaywrightDriver implements BrowserDriver {
         }
       }
       try {
+        if (this.transmitting) {
+          if (!this.scope)
+            throw new Error("Browser transmission requires an application authority");
+          await this.scope.authorize();
+        }
         const response = await route.fetch({ maxRedirects: 0, maxRetries: 0, timeout: 10_000 });
         if (response.status() >= 300 && response.status() < 400 && response.headers().location) {
           if (request.isNavigationRequest()) this.blockedNavigation = true;
@@ -223,6 +236,11 @@ export class PlaywrightDriver implements BrowserDriver {
           const label =
             [...(element.labels ?? [])].map((node) => node.textContent?.trim() ?? "").join(" ") ||
             element.getAttribute("aria-label") ||
+            (element.getAttribute("aria-labelledby") ?? "")
+              .split(/\s+/)
+              .map((id) => document.getElementById(id)?.textContent?.trim() ?? "")
+              .filter(Boolean)
+              .join(" ") ||
             "";
           const fileHashes =
             element instanceof HTMLInputElement && element.type === "file"
@@ -247,12 +265,19 @@ export class PlaywrightDriver implements BrowserDriver {
                   ? "select"
                   : element.type,
             required: element.required,
+            multiple: element instanceof HTMLSelectElement && element.multiple,
+            selectedValues:
+              element instanceof HTMLSelectElement && element.multiple
+                ? [...element.selectedOptions].map((option) => option.value)
+                : undefined,
             value: element.value,
             fileHashes,
             checked: element instanceof HTMLInputElement ? element.checked : undefined,
             options:
               element instanceof HTMLSelectElement
-                ? [...element.options].map((option) => option.value)
+                ? [...element.options]
+                    .filter((option) => !option.disabled)
+                    .map((option) => option.value)
                 : [],
           };
         }),
@@ -366,15 +391,36 @@ export class PlaywrightDriver implements BrowserDriver {
       return false;
     }
   }
-  async fill(field: Field, value: string | boolean) {
+  async fill(field: Field, value: PersonalScreeningAnswer["value"]) {
     if (!this.page) throw new Error("Browser is not open");
+    this.transmitting = true;
     const locator = this.page.locator(`[data-jobpilot-ref="${field.ref}"]`);
     if (field.type === "checkbox") {
       if (typeof value !== "boolean")
         throw new Error("needs_user: Checkbox needs an explicit boolean answer");
       await locator.setChecked(value);
+    } else if (field.type === "select" && field.multiple) {
+      if (
+        !Array.isArray(value) ||
+        value.some((item) => field.options.filter((option) => option === item).length !== 1)
+      )
+        throw new Error("needs_user: Answer does not match observed multiselect options");
+      const prior = await locator.evaluate((element) => {
+        if (!(element instanceof HTMLSelectElement) || !element.multiple)
+          throw new Error("needs_user: Multiselect control changed");
+        return [...element.selectedOptions].map((option) => option.value);
+      });
+      if (
+        prior.length &&
+        (prior.length !== value.length || !value.every((item) => prior.includes(item)))
+      )
+        throw new Error("needs_user: Existing selections conflict with the approved answer");
+      await locator.selectOption(value);
     } else if (field.type === "select") {
-      if (typeof value !== "string" || !field.options.includes(value))
+      if (
+        typeof value !== "string" ||
+        field.options.filter((option) => option === value).length !== 1
+      )
         throw new Error("needs_user: Answer does not match observed select option");
       await locator.selectOption(value);
     } else {
@@ -384,6 +430,7 @@ export class PlaywrightDriver implements BrowserDriver {
   }
   async upload(field: Field, path: string, bytes: Buffer) {
     if (!this.page) throw new Error("Browser is not open");
+    this.transmitting = true;
     await this.page
       .locator(`[data-jobpilot-ref="${field.ref}"]`)
       .setInputFiles({ name: basename(path), mimeType: "application/pdf", buffer: bytes });
@@ -414,7 +461,7 @@ export class PersonalBrowserBroker {
   private opened = false;
   private driverClosed = false;
   private crossedBoundary = false;
-  private used = new Map<string, string | boolean>();
+  private used = new Map<string, PersonalScreeningAnswer["value"]>();
   private uploadedHash?: string;
   private uploadedFields = new Map<string, string>();
   private lockNonce = randomUUID();
@@ -556,6 +603,7 @@ export class PersonalBrowserBroker {
         authorize: async () => {
           const current = await this.load();
           this.validateLease(current);
+          await this.api(`/attempts/${current.id}/authorize-transmission`, this.lease());
           if (!["preparing", "prepared", "submitting"].includes(current.state))
             throw new Error("Browser authority was revoked");
         },
@@ -653,7 +701,9 @@ export class PersonalBrowserBroker {
       {
         attemptId: attempt.id,
         observedAt: new Date().toISOString(),
-        fields: this.snapshot.fields.map(({ value: _value, ...field }) => field),
+        fields: this.snapshot.fields.map(
+          ({ value: _value, selectedValues: _selected, ...field }) => field,
+        ),
       },
       null,
       2,
@@ -673,10 +723,7 @@ export class PersonalBrowserBroker {
       privacyScope: "metadata_only",
       fields: this.snapshot.fields.map((field) => {
         const matches = (attempt.manifest.answers ?? []).flatMap((answer, index) =>
-          (answer.fieldName && answer.fieldName === field.name) ||
-          (answer.label && clean(answer.label) === clean(field.label))
-            ? [`answer-${index}`]
-            : [],
+          this.answerTargetsField(answer, field, this.snapshot!.fields) ? [`answer-${index}`] : [],
         );
         const attachments = (attempt.manifest.attachments ?? []).flatMap((attachment, index) =>
           field.type === "file" && attachment.fieldName === field.name
@@ -687,7 +734,7 @@ export class PersonalBrowserBroker {
           ref: field.ref,
           type: field.type,
           required: field.required,
-          hasValue: !!field.value,
+          hasValue: field.multiple ? !!field.selectedValues?.length : !!field.value,
           resumeUpload:
             field.type === "file" && /resume|résumé|cv/i.test(`${field.name} ${field.label}`),
           answerKey: matches.length === 1 ? matches[0] : null,
@@ -697,6 +744,49 @@ export class PersonalBrowserBroker {
       }),
       submitCount: this.snapshot.submitCount,
     };
+  }
+
+  private answerTargetsField(answer: Answer, field: Field, fields: Field[]) {
+    if (answer.fieldName)
+      return (
+        answer.fieldName === field.name &&
+        fields.filter((entry) => entry.name === field.name).length === 1
+      );
+    return (
+      !!answer.label &&
+      clean(answer.label) === clean(field.label) &&
+      fields.filter((entry) => clean(entry.label) === clean(field.label)).length === 1
+    );
+  }
+  private answerMatches(field: Field, value: PersonalScreeningAnswer["value"]) {
+    if (Array.isArray(value))
+      return (
+        !!field.multiple &&
+        Array.isArray(field.selectedValues) &&
+        field.selectedValues.length === value.length &&
+        new Set(field.selectedValues).size === value.length &&
+        value.every((item) => field.selectedValues!.includes(item))
+      );
+    return (
+      this.driver?.answerMatches?.(field, value) ??
+      (field.type === "checkbox" ? field.checked === value : field.value === value)
+    );
+  }
+  private async observedField(expected: Field) {
+    const current = await this.driver!.snapshot();
+    await this.checkSnapshot(current);
+    const matches = current.fields.filter(
+      (field) =>
+        field.name === expected.name &&
+        field.label === expected.label &&
+        field.type === expected.type,
+    );
+    if (matches.length !== 1)
+      throw new Error("needs_user: Field identity changed or became ambiguous");
+    return matches[0]!;
+  }
+  private async authorizeTransmission(attempt: Attempt) {
+    await this.api(`/attempts/${attempt.id}/authorize-transmission`, this.lease());
   }
 
   async fillField(ref: string, answerKey: string) {
@@ -715,16 +805,53 @@ export class PersonalBrowserBroker {
       )
     )
       throw new Error("needs_user: Unsupported field");
-    if (
-      !(answer.fieldName && answer.fieldName === field.name) &&
-      !(answer.label && clean(answer.label) === clean(field.label))
-    )
-      throw new Error("needs_user: Answer does not match observed field identity");
     const duplicate = this.snapshot?.fields.filter(
       (entry) => entry.name === field.name && entry.label === field.label,
     );
     if (duplicate?.length !== 1) throw new Error("needs_user: Ambiguous field identity");
-    await this.driver!.fill(field, answer.value);
+    if (!this.answerTargetsField(answer, field, this.snapshot!.fields))
+      throw new Error("needs_user: Answer does not match observed field identity");
+    const observed = await this.observedField(field);
+    if (Boolean(observed.multiple) !== Boolean(field.multiple))
+      throw new Error("needs_user: Field selection mode changed");
+    if (observed.multiple) {
+      if (
+        !Array.isArray(answer.value) ||
+        answer.value.length > 50 ||
+        new Set(answer.value).size !== answer.value.length ||
+        answer.value.some(
+          (item) =>
+            !item.trim() || observed.options.filter((option) => option === item).length !== 1,
+        )
+      )
+        throw new Error(
+          "needs_user: Multiple selections require a complete exact approved option set",
+        );
+      if (!Array.isArray(observed.selectedValues))
+        throw new Error("needs_user: Existing selections could not be verified");
+      if (observed.selectedValues.length && !this.answerMatches(observed, answer.value))
+        throw new Error("needs_user: Existing selections conflict with the approved answer");
+    } else if (Array.isArray(answer.value))
+      throw new Error("needs_user: An answer set requires an observed multiselect control");
+    if (
+      observed.type === "date" &&
+      (typeof answer.value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(answer.value))
+    )
+      throw new Error("needs_user: Date control requires an exact approved calendar date");
+    if (
+      !observed.multiple &&
+      observed.type !== "checkbox" &&
+      observed.value &&
+      !this.answerMatches(observed, answer.value)
+    )
+      throw new Error("needs_user: Existing field value conflicts with the approved answer");
+    if (observed.type === "checkbox" && observed.checked === true && answer.value !== true)
+      throw new Error("needs_user: Existing checkbox value conflicts with the approved answer");
+    await this.authorizeTransmission(attempt);
+    await this.driver!.fill(observed, answer.value);
+    const filled = await this.observedField(observed);
+    if (!this.answerMatches(filled, answer.value))
+      throw new Error("needs_user: Approved answer was not confirmed after filling");
     this.used.set(field.name || field.label, answer.value);
     return { status: "filled", transmitting: true, ref, answerKey };
   }
@@ -747,7 +874,17 @@ export class PersonalBrowserBroker {
       throw new Error("Artifact lies outside the private runtime");
     const bytes = await readFile(path);
     if (sha(bytes) !== artifact.sha256) throw new Error("Resume artifact hash mismatch");
-    await this.driver!.upload(field, path, bytes);
+    const observed = await this.observedField(field);
+    if (
+      observed.fileHashes?.length &&
+      (observed.fileHashes.length !== 1 || observed.fileHashes[0] !== artifact.sha256)
+    )
+      throw new Error("needs_user: Existing upload conflicts with the approved resume");
+    await this.authorizeTransmission(attempt);
+    await this.driver!.upload(observed, path, bytes);
+    const uploaded = await this.observedField(observed);
+    if (uploaded.fileHashes?.length !== 1 || uploaded.fileHashes[0] !== artifact.sha256)
+      throw new Error("needs_user: Approved resume upload was not confirmed");
     this.uploadedHash = artifact.sha256;
     this.uploadedFields.set(field.name || field.label, artifact.sha256);
     return { status: "uploaded", transmitting: true, sha256: artifact.sha256 };
@@ -771,7 +908,17 @@ export class PersonalBrowserBroker {
       throw new Error("Attachment lies outside private user storage");
     const bytes = await readFile(path);
     if (sha(bytes) !== attachment.sha256) throw new Error("Attachment artifact hash mismatch");
-    await this.driver!.upload(field, path, bytes);
+    const observed = await this.observedField(field);
+    if (
+      observed.fileHashes?.length &&
+      (observed.fileHashes.length !== 1 || observed.fileHashes[0] !== attachment.sha256)
+    )
+      throw new Error("needs_user: Existing upload conflicts with the approved attachment");
+    await this.authorizeTransmission(attempt);
+    await this.driver!.upload(observed, path, bytes);
+    const uploaded = await this.observedField(observed);
+    if (uploaded.fileHashes?.length !== 1 || uploaded.fileHashes[0] !== attachment.sha256)
+      throw new Error("needs_user: Approved attachment upload was not confirmed");
     this.uploadedFields.set(field.name || field.label, attachment.sha256);
     return { status: "uploaded", transmitting: true, attachmentKey };
   }
@@ -881,13 +1028,7 @@ export class PersonalBrowserBroker {
         throw new Error("needs_user: A required frozen attachment was not uploaded");
     for (const field of snapshot.fields) {
       const value = this.used.get(field.name || field.label);
-      if (
-        value !== undefined &&
-        !(
-          this.driver?.answerMatches?.(field, value) ??
-          (field.type === "checkbox" ? field.checked === value : field.value === value)
-        )
-      )
+      if (value !== undefined && !this.answerMatches(field, value))
         throw new Error("needs_user: Observed answer changed after fill");
     }
     for (const field of snapshot.fields) {
@@ -1014,9 +1155,11 @@ export class PersonalBrowserBroker {
   async diagnose(operation: string, error: unknown) {
     const manifest = this.attempt?.manifest;
     await saveBrokerDiagnostic(this.config, operation, error, [
-      ...(manifest?.answers ?? []).flatMap((answer) =>
-        typeof answer.value === "string" ? [answer.value] : [],
-      ),
+      ...(manifest?.answers ?? []).flatMap((answer) => {
+        if (Array.isArray(answer.value)) return answer.value;
+        if (typeof answer.value === "string") return [answer.value];
+        return [];
+      }),
       manifest?.applicantEmail ?? "",
       manifest?.document?.path ?? "",
       ...(manifest?.attachments ?? []).map((artifact) => artifact.path),

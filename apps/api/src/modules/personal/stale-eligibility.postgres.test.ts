@@ -250,6 +250,7 @@ describe.skipIf(!process.env.PERSONAL_TEST_DATABASE_URL)(
     test("blocked retry lineage is immutable and active preparation or tailoring claims defer refresh", async () => {
       const f = await fixture();
       const blocked = await f.record();
+      blocked.input.campaignId = f.campaign.id;
       const attempt = await db.service.start(f.user.id, blocked.input);
       await db.service.park(f.user.id, attempt.id, attempt, "blocked", "Synthetic unknown answer");
       const history = await db.prisma.personalAttempt.findMany({
