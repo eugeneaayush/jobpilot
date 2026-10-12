@@ -179,3 +179,51 @@ jobs:
             echo "obsolete local Codex marketplace shipped in publish root"
             exit 1
           }
+
+  docker:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ci-docker-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # deploy.yml builds these images on push to prod; a full checkout hides files the images omit.
+      - name: Build API image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./apps/api/Dockerfile
+          load: true
+          tags: jobpilot-api:ci
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+
+      - name: Build web image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./apps/web/Dockerfile
+          push: false
+          build-args: NEXT_PUBLIC_API_URL=http://localhost:4101
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+
+      # /api/health never queries the database, so an unreachable URL still proves every import resolves.
+      - name: Smoke-boot API image
+        run: |
+          docker run -d --name api-smoke -p 4101:4101 \
+            -e DATABASE_URL=postgresql://smoke:smoke@127.0.0.1:1/smoke \
+            -e JWT_SECRET=ci-smoke-secret \
+            -e SECRET_MASTER_KEY=Y2ktdGVzdC1tYXN0ZXIta2V5LTMyLWJ5dGVzLWxvbmc= \
+            jobpilot-api:ci
+          status=0
+          curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://localhost:4101/api/health || status=1
+          docker logs api-smoke
+          docker rm -f api-smoke
+          exit $status
