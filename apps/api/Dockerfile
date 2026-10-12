@@ -32,6 +32,8 @@ COPY --from=deps /app/node_modules /app/node_modules
 COPY --from=deps /app/package.json /app/package.json
 COPY --from=deps /app/packages/contracts /app/packages/contracts
 COPY --from=deps /app/apps/api /app/apps/api
+# Two personal controllers import pure helpers from the plugin's browser scripts by relative path.
+COPY plugin/scripts/personal-browser /app/plugin/scripts/personal-browser
 
 # Local-storage fallback dir (resumes / generated PDFs); compose mounts a volume here.
 RUN mkdir -p storage

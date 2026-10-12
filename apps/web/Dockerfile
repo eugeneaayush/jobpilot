@@ -20,6 +20,8 @@ RUN bun install --frozen-lockfile --ignore-scripts
 COPY packages ./packages
 COPY apps/api ./apps/api
 COPY apps/web ./apps/web
+# The App type reaches personal controllers that import these helpers; type-checking needs them.
+COPY plugin/scripts/personal-browser ./plugin/scripts/personal-browser
 
 # Generate the Prisma client so @jobpilot/api types resolve for the web build.
 WORKDIR /app/apps/api
