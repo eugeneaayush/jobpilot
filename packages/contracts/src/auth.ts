@@ -68,6 +68,17 @@ export const ConfirmEmailChangeSchema = z.object({
   token: z.string().min(1),
 });
 
+/** currentPassword is required by the service iff the account has one; "" counts as absent. */
+export const DeleteAccountSchema = z.object({
+  confirmation: z.string().trim().min(1, "Type your sign-in email to confirm"),
+  currentPassword: z.string().optional(),
+});
+
+/** The typed confirmation must match the sign-in email, ignoring case and surrounding spaces. */
+export function confirmsAccountEmail(typed: string, email: string): boolean {
+  return typed.trim().toLowerCase() === email.trim().toLowerCase();
+}
+
 export type LoginInput = z.infer<typeof LoginSchema>;
 export type RegisterInput = z.infer<typeof RegisterSchema>;
 export type ApiTokenCreateInput = z.infer<typeof ApiTokenCreateSchema>;
@@ -78,3 +89,4 @@ export type OAuthProviderInput = z.infer<typeof OAuthProviderSchema>;
 export type ChangePasswordInput = z.infer<typeof ChangePasswordSchema>;
 export type ChangeEmailInput = z.infer<typeof ChangeEmailSchema>;
 export type ConfirmEmailChangeInput = z.infer<typeof ConfirmEmailChangeSchema>;
+export type DeleteAccountInput = z.infer<typeof DeleteAccountSchema>;

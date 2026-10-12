@@ -12,6 +12,7 @@ export type {
   ChangeEmailResponse,
   ChangePasswordResponse,
   ConfirmEmailChangeResponse,
+  DeleteAccountResponse,
   ForgotPasswordResponse,
   LogoutResponse,
   MeResponse,

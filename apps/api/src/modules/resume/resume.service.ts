@@ -9,6 +9,7 @@ import {
   deleteAllResumeArtifacts,
   ensureResumesDir,
   generateResumeFilename,
+  removeUnrecordedUpload,
 } from "@/common/storage/storage";
 import { PrismaClient } from "@/generated/prisma/client";
 import { backfillResumeIds } from "./backfill-ids";
@@ -72,17 +73,23 @@ export class ResumeService {
     const dir = await ensureResumesDir();
     const filename = generateResumeFilename(file.name);
     const buffer = Buffer.from(await file.arrayBuffer());
-    await writeFile(path.join(dir, filename), buffer);
+    await writeFile(path.join(dir, filename), buffer, { flag: "wx" });
 
-    const resume = await this.prisma.resume.create({
-      data: {
-        userId,
-        label,
-        sourceFilename: filename,
-        sourceMimeType: file.type || "application/pdf",
-        sourceSizeBytes: file.size,
-      },
-    });
+    const resume = await this.prisma.resume
+      .create({
+        data: {
+          userId,
+          label,
+          sourceFilename: filename,
+          sourceMimeType: file.type || "application/pdf",
+          sourceSizeBytes: file.size,
+        },
+      })
+      .catch(async (error: unknown) => {
+        // Only this row would reference the file; without it nothing ever removes the file.
+        await removeUnrecordedUpload(filename);
+        throw error;
+      });
 
     const isFirst = (await this.prisma.resume.count({ where: { userId } })) === 1;
     if (isFirst) {
