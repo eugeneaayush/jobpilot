@@ -50,9 +50,9 @@ function PortfolioForm(props: PortfolioFormProps): ReactElement {
 
   const form = useAppForm({
     defaultValues: toPortfolioFormValues(settings),
-    onSubmit: async ({ value }) => {
+    onSubmit: ({ value }) => {
       const { availability, ...rest } = value;
-      await save.mutateAsync({ ...rest, availability: availability === "" ? null : availability });
+      save.mutate({ ...rest, availability: availability === "" ? null : availability });
     },
   });
 

@@ -102,8 +102,8 @@ function SettingsForm(props: SettingsFormProps): ReactElement {
   const form = useAppForm({
     defaultValues: initialData,
     validators: { onSubmit: userWithAutoApplySchema },
-    onSubmit: async ({ value }) => {
-      await save.mutateAsync(value);
+    onSubmit: ({ value }) => {
+      save.mutate(value);
     },
   });
 

@@ -16,8 +16,8 @@ export function LoginForm(): ReactElement {
   const form = useAppForm({
     defaultValues: DEFAULT_VALUES,
     validators: { onSubmit: LoginSchema },
-    onSubmit: async ({ value }) => {
-      await login.mutateAsync(value);
+    onSubmit: ({ value }) => {
+      login.mutate(value);
     },
   });
 

@@ -85,11 +85,17 @@ export function InstructionsEditor(props: InstructionsEditorProps): ReactElement
   // dialog, and it carries the values the save finishes with.
   const [pending, setPending] = useState<InstructionsFormValues | null>(null);
 
-  const commit = async (value: InstructionsFormValues, onChange: PilotInstructionsChange) => {
-    await save.mutateAsync({ goals: value.goals, config: toConfig(value), onChange });
-    setPending(null);
-    // Re-baseline the defaults so the dirty save bar hides after a successful save.
-    form.reset(value);
+  const commit = (value: InstructionsFormValues, onChange: PilotInstructionsChange) => {
+    save.mutate(
+      { goals: value.goals, config: toConfig(value), onChange },
+      {
+        onSuccess: () => {
+          setPending(null);
+          // Re-baseline the defaults so the dirty save bar hides after a successful save.
+          form.reset(value);
+        },
+      },
+    );
   };
 
   const form = useAppForm({
@@ -99,7 +105,7 @@ export function InstructionsEditor(props: InstructionsEditorProps): ReactElement
     onSubmit: async ({ value }) => {
       // Only rewritten goals strand work - every config field is read live off the instructions.
       if (value.goals === state.instructionsGoals) {
-        await commit(value, NO_INSTRUCTIONS_CHANGE);
+        commit(value, NO_INSTRUCTIONS_CHANGE);
         return;
       }
 
@@ -107,7 +113,7 @@ export function InstructionsEditor(props: InstructionsEditorProps): ReactElement
       const { data, isError } = await impact.refetch();
       const inFlight = data ? data.searches.length + data.campaigns.length + data.approvedJobs : 0;
       if (!isError && inFlight === 0) {
-        await commit(value, NO_INSTRUCTIONS_CHANGE);
+        commit(value, NO_INSTRUCTIONS_CHANGE);
         return;
       }
       setPending(value);
@@ -203,7 +209,7 @@ export function InstructionsEditor(props: InstructionsEditorProps): ReactElement
         isLoading={impact.isLoading}
         saving={save.isPending}
         onConfirm={(change) => {
-          if (pending) void commit(pending, change);
+          if (pending) commit(pending, change);
         }}
         onCancel={() => setPending(null)}
       />

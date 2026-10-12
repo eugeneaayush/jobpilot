@@ -67,8 +67,8 @@ export function OnboardingWizard(): ReactElement {
   const form = useAppForm({
     defaultValues: USER_DEFAULT_VALUES,
     validators: { onSubmit: userWithAutoApplySchema },
-    onSubmit: async ({ value }) => {
-      await save.mutateAsync(value);
+    onSubmit: ({ value }) => {
+      save.mutate(value);
     },
   });
   const isProfileStep = step < PROFILE_STEPS;
