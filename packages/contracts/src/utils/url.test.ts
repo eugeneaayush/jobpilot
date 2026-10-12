@@ -15,10 +15,19 @@ describe("normalizeLinkUrl", () => {
     expect(normalizeLinkUrl("example.com/a:b")).toBe("https://example.com/a:b");
   });
 
-  it("reads host:port as a bare host, not a scheme", () => {
+  it("reads a dotted host:port as a bare host, not a scheme", () => {
     expect(normalizeLinkUrl("example.com:8080")).toBe("https://example.com:8080");
-    expect(normalizeLinkUrl("localhost:3000/portfolio")).toBe("https://localhost:3000/portfolio");
+    expect(normalizeLinkUrl("www.example.com:443/portfolio")).toBe(
+      "https://www.example.com:443/portfolio",
+    );
     expect(normalizeLinkUrl("example.com:8080?tab=1")).toBe("https://example.com:8080?tab=1");
+  });
+
+  it("drops an undotted name before digits, since tel:911 looks the same as host:port", () => {
+    expect(normalizeLinkUrl("tel:911")).toBe("");
+    expect(normalizeLinkUrl("sms:12345")).toBe("");
+    expect(normalizeLinkUrl("ftp:21")).toBe("");
+    expect(normalizeLinkUrl("localhost:3000")).toBe("");
   });
 
   it("keeps an existing http(s) protocol, case and all, trimming around it", () => {

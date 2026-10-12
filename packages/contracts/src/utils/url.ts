@@ -12,8 +12,9 @@ export function normalizeLinkUrl(value: string): string {
   if (/^https?:\/\//i.test(trimmed)) {
     return trimmed;
   }
-  // `host:port` also opens with `name:`, so only a `name:` not followed by a port is a scheme.
-  if (/^[a-z][a-z\d+.-]*:(?!\d{1,5}(?:[/?#]|$))/i.test(trimmed)) {
+  // Only a dotted name reads as `host:port` (`example.com:8080`); `tel:911` is a scheme.
+  const hostWithPort = /^[a-z\d-]+(?:\.[a-z\d-]+)+:\d{1,5}(?:[/?#]|$)/i;
+  if (/^[a-z][a-z\d+.-]*:/i.test(trimmed) && !hostWithPort.test(trimmed)) {
     return "";
   }
   return `https://${trimmed}`;
