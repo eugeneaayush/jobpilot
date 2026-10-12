@@ -64,7 +64,8 @@ export function useAutosave<T>(options: AutosaveOptions<T>): Autosave<T> {
       if (timer.current) {
         clearTimeout(timer.current);
         if (pending.current !== null) {
-          void saveRef.current(pending.current);
+          // Unmounted, so there is no "error" state left to set; the save reports its own failure.
+          saveRef.current(pending.current).catch(() => null);
         }
       }
     };
