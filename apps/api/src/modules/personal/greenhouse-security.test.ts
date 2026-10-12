@@ -63,8 +63,8 @@ async function fixture(html: string, status = 200, formTimeout?: number) {
     transport: async (request) => {
       requests.push({ url: request.url, method: request.method });
       if (request.url === posting) {
-        // No setOffline: it stalled goto for 15 s and let a followed redirect pass as a timeout.
-        // The test's reason check catches that instead; `.invalid` never resolves.
+        // No setOffline: inside the route it deadlocked until goto's 15 s timeout, so the 302 was
+        // never sent. Test transports make the driver block DNS, so nothing real is reached.
         if (status === 302)
           return new Response(null, {
             status,

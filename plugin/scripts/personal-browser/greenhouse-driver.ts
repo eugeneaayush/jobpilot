@@ -566,6 +566,9 @@ export class GreenhouseDriver implements BrowserDriver {
       acceptDownloads: false,
       locale: "en-US",
       serviceWorkers: "block",
+      // A test transport means no real host may be reached: browser-followed redirects skip
+      // routing, and setOffline from inside a route deadlocks the paused navigation.
+      ...(this.options.transport && { args: ["--host-resolver-rules=MAP * ~NOTFOUND"] }),
     });
     await installGreenhouseUploadProgress(this.context);
     await this.context.route("**/*", (route) => this.route(route));
