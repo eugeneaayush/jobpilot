@@ -27,17 +27,25 @@ describe("statusSchema", () => {
 
 describe("applicationSourceSchema", () => {
   it("accepts the five origins and rejects an unknown one", () => {
-    expect(applicationSourceSchema.safeParse("auto_apply").success).toBe(true);
-    expect(applicationSourceSchema.safeParse("networking").success).toBe(true);
+    for (const source of ["apply", "auto_apply", "manual", "search", "networking"]) {
+      expect(applicationSourceSchema.safeParse(source).success).toBe(true);
+    }
     expect(applicationSourceSchema.safeParse("referral").success).toBe(false);
   });
 });
 
 describe("event schemas", () => {
-  it("enforce the closed event vocabularies", () => {
-    expect(applicationEventKindSchema.safeParse("note").success).toBe(true);
+  it("accept the three event kinds and reject an unknown one", () => {
+    for (const kind of ["status_change", "note", "email"]) {
+      expect(applicationEventKindSchema.safeParse(kind).success).toBe(true);
+    }
     expect(applicationEventKindSchema.safeParse("call").success).toBe(false);
-    expect(applicationEventSourceSchema.safeParse("campaign").success).toBe(true);
+  });
+
+  it("accept the three event sources and reject an unknown one", () => {
+    for (const source of ["manual", "email", "campaign"]) {
+      expect(applicationEventSourceSchema.safeParse(source).success).toBe(true);
+    }
     expect(applicationEventSourceSchema.safeParse("agent").success).toBe(false);
   });
 });

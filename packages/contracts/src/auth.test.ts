@@ -109,6 +109,13 @@ describe("ChangePasswordSchema", () => {
     expect(ChangePasswordSchema.safeParse({ newPassword: "weak" }).success).toBe(false);
     expect(ChangePasswordSchema.safeParse({}).success).toBe(false);
   });
+
+  it("keeps any currentPassword, including the empty string the service treats as absent", () => {
+    for (const currentPassword of ["x", ""]) {
+      const input = { currentPassword, newPassword: STRONG_PASSWORD };
+      expect(ChangePasswordSchema.parse(input)).toEqual(input);
+    }
+  });
 });
 
 describe("ChangeEmailSchema", () => {
@@ -118,5 +125,12 @@ describe("ChangeEmailSchema", () => {
     });
     expect(ChangeEmailSchema.safeParse({ newEmail: "nope" }).success).toBe(false);
     expect(ChangeEmailSchema.safeParse({}).success).toBe(false);
+  });
+
+  it("keeps an empty currentPassword for the service to treat as absent", () => {
+    expect(ChangeEmailSchema.parse({ newEmail: "next@example.com", currentPassword: "" })).toEqual({
+      newEmail: "next@example.com",
+      currentPassword: "",
+    });
   });
 });

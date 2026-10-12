@@ -133,6 +133,14 @@ describe("networkingMessageResultSchema", () => {
     if (!failed.success) {
       expect(failed.error.issues[0].message).toBe("failed requires failReason.");
     }
+    const emptyReason = networkingMessageResultSchema.safeParse({
+      outcome: "failed",
+      failReason: "",
+    });
+    expect(emptyReason.success).toBe(false);
+    expect(emptyReason.error?.issues.map((issue) => issue.message)).toContain(
+      "failed requires failReason.",
+    );
     expect(
       networkingMessageResultSchema.safeParse({ outcome: "failed", failReason: "bounce" }).success,
     ).toBe(true);
@@ -148,9 +156,13 @@ describe("networkingMessageResultSchema", () => {
       networkingMessageResultSchema.safeParse({ outcome: "sent", sentAt: "2026-01-02T03:04:05Z" })
         .success,
     ).toBe(true);
-    expect(
-      networkingMessageResultSchema.safeParse({ outcome: "failed", failReason: "" }).success,
-    ).toBe(false);
+    // "sent" so the failed-needs-a-reason refine cannot be what rejects the empty string.
+    const emptyReason = networkingMessageResultSchema.safeParse({
+      outcome: "sent",
+      failReason: "",
+    });
+    expect(emptyReason.success).toBe(false);
+    expect(emptyReason.error?.issues.map((issue) => issue.path)).toEqual([["failReason"]]);
   });
 });
 
