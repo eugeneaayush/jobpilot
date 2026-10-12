@@ -19,6 +19,7 @@ const policy = schedulerPolicy({
   personal: {
     ...input,
     scheduler: "personal-campaign-v1",
+    approvalPolicy: "per-application-v1",
     enabled: true,
     policyVersion: "test",
     authorization: null,

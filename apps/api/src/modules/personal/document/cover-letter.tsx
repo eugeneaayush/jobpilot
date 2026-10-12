@@ -17,6 +17,12 @@ export function coverLetterContent(
       citations.push({ pointer, value });
     return value;
   };
+  const header = [
+    data.basics.name,
+    ...(["email", "phone"] as const).flatMap((field) =>
+      data.basics[field] ? [cite(`/basics/${field}`, data.basics[field])] : [],
+    ),
+  ];
   const paragraphs = [
     "Dear Hiring Team,",
     `I am applying for the ${job.title} position at ${job.company}. Thank you for considering my application.`,
@@ -33,7 +39,7 @@ export function coverLetterContent(
       }
     }
     paragraphs.push("Thank you for considering my application.", "Sincerely,", data.basics.name);
-    return { paragraphs, citations, resumeDataHash: manifestHash(data) };
+    return { header, paragraphs, citations, resumeDataHash: manifestHash(data) };
   }
   const educationIndex = data.education.findIndex((education) =>
     /\bMBA\b|master.*business administration/i.test(education.degree),
@@ -105,7 +111,7 @@ export function coverLetterContent(
     "Sincerely,",
     data.basics.name,
   );
-  return { paragraphs, citations, resumeDataHash: manifestHash(data) };
+  return { header, paragraphs, citations, resumeDataHash: manifestHash(data) };
 }
 
 export async function generateCoverLetter(
@@ -128,6 +134,7 @@ export async function generateCoverLetter(
         size="LETTER"
         style={{ fontFamily: "Times-Roman", fontSize: 11, padding: 54, lineHeight: 1.35 }}
       >
+        <Text style={{ marginBottom: 14 }}>{content.header.join(" · ")}</Text>
         {content.paragraphs.map((text) => (
           <Text key={text} style={{ marginBottom: 14 }}>
             {text}

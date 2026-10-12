@@ -31,7 +31,7 @@ test("an unrelated save preserves the loaded countries and notes verbatim", asyn
   const settings = page.getByTestId("settings");
 
   // Touch only one unrelated fact; neither new field is edited.
-  await settings.getByLabel("Years of experience").fill("6");
+  await settings.getByLabel("Years of experience", { exact: true }).fill("6");
   await settings.getByRole("button", { name: "Save" }).click();
 
   const o = observed(page);

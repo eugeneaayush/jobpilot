@@ -148,3 +148,48 @@ test("clearing every saved answer replaces the snapshot with an empty one", asyn
   await expect.poll(() => o.answersPosts.length).toBe(1);
   expect(o.answersPosts[0]?.body).toEqual({ expectedUpdatedAt: NOW, answers: [] });
 });
+
+test("multiselect saves the complete exact option values only after confirmation", async ({
+  page,
+}) => {
+  const o = observed(page);
+  const question = {
+    fieldName: "locations",
+    label: "Preferred locations",
+    type: "select",
+    required: true,
+    multiple: true,
+    options: [
+      { value: "ny", label: "New York" },
+      { value: "sf", label: "San Francisco" },
+      { value: "remote", label: "Remote" },
+    ],
+  };
+  o.answersResponse.questions.push(question);
+  await page
+    .getByTestId("records")
+    .getByRole("row", { name: /MBA Intern/ })
+    .getByRole("button", { name: "Answers" })
+    .click();
+  const dialog = page.locator(".MuiDialog-root");
+  await dialog.getByRole("combobox", { name: "Preferred locations" }).click();
+  await page.getByRole("option", { name: "New York", exact: true }).click();
+  await page.getByRole("option", { name: "San Francisco", exact: true }).click();
+  await page.keyboard.press("Escape");
+  await expect(dialog.getByRole("button", { name: "Save answers" })).toBeDisabled();
+  await dialog.getByRole("checkbox", { name: /I confirm these values/ }).check();
+  await dialog.getByRole("button", { name: "Save answers" }).click();
+  await expect.poll(() => o.answersPosts.length).toBe(1);
+  expect(o.answersPosts[0]?.body).toMatchObject({
+    answers: expect.arrayContaining([
+      {
+        key: "locations",
+        fieldName: "locations",
+        label: "Preferred locations",
+        value: ["ny", "sf"],
+        source: { kind: "explicit_user", confirmed: true },
+      },
+    ]),
+  });
+  expectOnlySyntheticTraffic(o, harnessOrigin);
+});

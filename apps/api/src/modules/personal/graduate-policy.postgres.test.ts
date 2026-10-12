@@ -1,4 +1,5 @@
 import {
+  approvePersonalFixture,
   createPersonalTestDatabase,
   type PersonalTestDatabase,
   personalFixture,
@@ -18,7 +19,8 @@ describe.skipIf(!testUrl)("graduate policy at the transactional submission bound
   it("a campaign cannot raise the user cap above 50", async () => {
     const f = await personalFixture(db, "submit", 100);
     const source = await f.record();
-    await db.prisma.personalPolicy.create({ data: { userId: f.user.id, dailyCap: 1 } });
+    await db.prisma.personalPolicy.update({ where: { userId: f.user.id }, data: { dailyCap: 1 } });
+    await approvePersonalFixture(db, f.user.id, source.record.id);
     await db.service.start(f.user.id, source.input);
     const second = await f.record();
     await expect(db.service.start(f.user.id, second.input)).rejects.toThrow("cap reached");

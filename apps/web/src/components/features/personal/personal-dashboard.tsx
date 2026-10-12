@@ -7,10 +7,12 @@ import { useApiQuery } from "@/api/hooks";
 import { personalQueries } from "@/api/personal";
 import { usePaginationParams } from "@/hooks/use-pagination";
 import { ActivityPanel } from "./activity-panel";
+import { BatchesPanel } from "./batches-panel";
 import { CampaignCard } from "./campaign-card";
 import { CapabilityBanner } from "./capability-banner";
 import { DigestPanel } from "./digest-panel";
 import { DiscoverCard } from "./discover-card";
+import { LeadsPanel } from "./leads-panel";
 import { isPersonalTrack } from "./personal-labels";
 import { ReadinessPanel } from "./readiness-panel";
 import { RecordsTable } from "./records-table";
@@ -64,9 +66,11 @@ export function PersonalDashboard(): ReactElement {
       </Grid>
       <DiscoverCard discoverEnabled={capabilities.personalMode} />
       <SearchPanel />
+      <LeadsPanel />
       <RegistryPanel />
       <DigestPanel />
       <CampaignCard />
+      <BatchesPanel />
       <ActivityPanel activity={dashboard.data.activity} supervisor={dashboard.data.supervisor} />
       <RecordsTable
         records={records.items}

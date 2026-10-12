@@ -10,6 +10,7 @@ import {
 import { z } from "zod/v4";
 import { conflict } from "@/common/errors";
 import type { PersonalRecord, Prisma } from "@/generated/prisma/client";
+import { documentPipelineMatches, verifierPipelineMatches } from "./local-tools/pipeline-config";
 import {
   manifestHash,
   privateArtifactRoot,
@@ -17,6 +18,15 @@ import {
   verifyPrivateArtifact,
 } from "./persistence-policy";
 import { objectValue, sha256 } from "./runtime";
+
+function verifiedDocument(document: PersonalAttachment) {
+  return (
+    document.verification?.status === "passed" &&
+    documentPipelineMatches(document.pipeline, "cbs-cover-letter") &&
+    verifierPipelineMatches(document.verification, "cbs-cover-letter") &&
+    document.verification.artifactSha256 === document.sha256
+  );
+}
 
 type RecordContext = Pick<PersonalRecord, "id" | "identity" | "details">;
 export const postingContentHash = (record: RecordContext) => {
@@ -183,13 +193,15 @@ export function attachmentStatus(
           !documents.some(
             (document) =>
               attachmentMatches(document, field, inventory) &&
-              document.review?.pdfHash === document.sha256,
+              document.review?.pdfHash === document.sha256 &&
+              verifiedDocument(document),
           ),
       )
       .map((field) => field.label || field.fieldName) ?? [];
   const unreviewed = documents.some(
     (document) =>
       document.review?.pdfHash !== document.sha256 ||
+      !verifiedDocument(document) ||
       !inventory?.requirements.some((field) => attachmentMatches(document, field, inventory)),
   );
   let readiness: "unknown" | "draft" | "ready" = "unknown";
@@ -262,5 +274,13 @@ export async function verifyAttachmentManifest(
     if (requireReady && document.review?.reviewer !== userId)
       throw conflict("Attachment must be reviewed by its owner");
     await verifyPrivateArtifact(document.path, document.sha256, privateArtifactRoot(userId));
+    if (requireReady) {
+      const reportHash = sha256(JSON.stringify(document.verification, null, 2));
+      await verifyPrivateArtifact(
+        join(privateArtifactRoot(userId), "document-checks", `${reportHash}.json`),
+        reportHash,
+        privateArtifactRoot(userId),
+      );
+    }
   }
 }

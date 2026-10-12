@@ -1,6 +1,15 @@
 # Private JobPilot implementation ownership
 
-Branch: `codex/private-jobpilot`. Original source inputs remain unmodified and untracked.
+Original private delivery branch: `codex/private-jobpilot`. Original source inputs
+remain unmodified and untracked.
+
+September 30 integration work extends this implementation. Its current scope,
+compatibility inventory, component provenance and migration/rollback instructions are
+in [docs/integration](integration/INTEGRATION_PLAN.md). See
+[VALIDATION.md](integration/VALIDATION.md) for the new executed checks; dated counts
+below remain historical delivery records. The integration adds exact application
+approval before live field entry/uploads, optional tools and discovery, document
+verification, batches and draft-only follow-ups. Stagehand remains deferred.
 
 ## Implementation ownership
 

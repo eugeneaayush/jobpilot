@@ -2,8 +2,14 @@ import { writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { PersonalCampaignService } from "./campaign.service";
 import { eligibilityContext } from "./eligibility-freshness";
+import { documentPipelineInputs } from "./local-tools/pipeline-config";
 import { manifestHash } from "./persistence-policy";
-import { type PersonalTestDatabase, personalFixture } from "./persistence-test-fixtures";
+import {
+  approvePersonalFixture,
+  type PersonalTestDatabase,
+  personalFixture,
+  refreshPersonalFixtureApproval,
+} from "./persistence-test-fixtures";
 import type { PersonalService } from "./personal.service";
 import { PersonalRecoveryService } from "./recovery.service";
 import { jsonValue, objectValue, sha256 } from "./runtime";
@@ -39,6 +45,7 @@ export async function recoveryTransferFixture(db: PersonalTestDatabase) {
       campaignSnapshotHash: original.authorization!.snapshotHash,
     },
   };
+  await refreshPersonalFixtureApproval(db, f.user.id, r.record.id, input.manifest, original.id);
   const attempt = await db.service.start(f.user.id, input);
   await db.service.park(
     f.user.id,
@@ -141,7 +148,12 @@ export async function recoveryTransferFixture(db: PersonalTestDatabase) {
           ...objectValue(row.details),
           eligibilityContext: eligibilityContext(row, { settings: f.settings, evidence: f.resume }),
           missingAnswers: [],
-          document: { path: f.artifactPath, sha256: db.hash },
+          document: {
+            ...documentPipelineInputs("cbs-letter-times"),
+            template: "cbs-letter-times",
+            path: f.artifactPath,
+            sha256: db.hash,
+          },
           manifestPath,
           preview: {
             readiness: "ready",
@@ -153,6 +165,13 @@ export async function recoveryTransferFixture(db: PersonalTestDatabase) {
         }),
       },
     });
+    const ticket = objectValue(objectValue(row.details).recoveryTicket);
+    await approvePersonalFixture(
+      db,
+      f.user.id,
+      row.id,
+      typeof ticket.campaignId === "string" ? ticket.campaignId : target.id,
+    );
   };
   const refreshAnswers = async () => {
     await Bun.sleep(2);

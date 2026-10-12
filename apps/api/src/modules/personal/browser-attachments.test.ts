@@ -31,6 +31,9 @@ async function fixture(
     extraRequired?: boolean;
     duplicate?: boolean;
     pathScope?: "foreign" | "symlink";
+    authorityRevoked?: boolean;
+    ignoreFill?: boolean;
+    ignoreUpload?: boolean;
   } = {},
 ) {
   const root = await mkdtemp(join(tmpdir(), "attachment-broker-synthetic-"));
@@ -133,10 +136,12 @@ async function fixture(
         : {}),
     }),
     fill: async (field, value) => {
+      if (options.ignoreFill) return;
       const match = fields.find((item) => item.ref === field.ref);
       if (match) match.value = String(value);
     },
     upload: async (field, path, bytes) => {
+      if (options.ignoreUpload) return;
       uploads.push({ field: field.name, path, bytes: bytes.toString() });
       const match = fields.find((item) => item.ref === field.ref);
       if (match) {
@@ -178,6 +183,10 @@ async function fixture(
           identity: manifest.identity,
           requisitionId: "123",
         });
+      if (pathname.endsWith("/authorize-transmission"))
+        return options.authorityRevoked
+          ? new Response(null, { status: 409 })
+          : Response.json({ status: "authorized" });
       if (pathname.endsWith("/begin-submit")) {
         events.push("begin-submit");
         state = "submitting";
@@ -398,6 +407,85 @@ describe("private browser attachments", () => {
       } finally {
         await f.close();
       }
+    }
+  });
+});
+
+describe("browser application approval and readback", () => {
+  test("refused authority prevents filling and uploading before applicant transmission", async () => {
+    const f = await fixture({ authorityRevoked: true });
+    try {
+      await f.broker.inspectForm();
+      await expect(f.broker.fillField("field-0", "answer-0")).rejects.toThrow("API refused");
+      await expect(f.broker.uploadResume("field-1")).rejects.toThrow("API refused");
+      expect(f.fields[0]?.value).toBe("");
+      expect(f.uploads).toHaveLength(0);
+    } finally {
+      await f.close();
+    }
+  });
+  test("a silently ignored fill cannot report success", async () => {
+    const f = await fixture({ ignoreFill: true });
+    try {
+      await f.broker.inspectForm();
+      await expect(f.broker.fillField("field-0", "answer-0")).rejects.toThrow(
+        "not confirmed after filling",
+      );
+    } finally {
+      await f.close();
+    }
+  });
+  test("a silently ignored upload cannot report success", async () => {
+    const f = await fixture({ ignoreUpload: true });
+    try {
+      await f.broker.inspectForm();
+      await expect(f.broker.uploadResume("field-1")).rejects.toThrow("upload was not confirmed");
+    } finally {
+      await f.close();
+    }
+  });
+  test("parks repeated controls that share the same source identity", async () => {
+    const f = await fixture();
+    try {
+      f.fields.push({ ...f.fields[0]!, ref: "repeated-email" });
+      await f.broker.inspectForm();
+      await expect(f.broker.fillField("field-0", "answer-0")).rejects.toThrow(
+        "Ambiguous field identity",
+      );
+      expect(f.fields[0]!.value).toBe("");
+      expect(f.fields.at(-1)!.value).toBe("");
+    } finally {
+      await f.close();
+    }
+  });
+  test("holds multi-select controls instead of reporting partial completion", async () => {
+    const f = await fixture();
+    try {
+      Object.assign(f.fields[0]!, {
+        type: "select",
+        multiple: true,
+        options: ["synthetic@example.test", "other@example.test"],
+      });
+      await f.broker.inspectForm();
+      await expect(f.broker.fillField("field-0", "answer-0")).rejects.toThrow(
+        "complete exact approved option set",
+      );
+      expect(f.fields[0]!.value).toBe("");
+    } finally {
+      await f.close();
+    }
+  });
+  test("preserves conflicting existing values", async () => {
+    const f = await fixture();
+    try {
+      f.fields[0]!.value = "different-synthetic@example.test";
+      await f.broker.inspectForm();
+      await expect(f.broker.fillField("field-0", "answer-0")).rejects.toThrow(
+        "Existing field value conflicts",
+      );
+      expect(f.fields[0]!.value).toBe("different-synthetic@example.test");
+    } finally {
+      await f.close();
     }
   });
 });

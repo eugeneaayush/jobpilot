@@ -174,7 +174,9 @@ export class PersonalTailoringService {
         details: { equals: jsonValue(current.record.details) },
         state: { notIn: ["applying", "submitted", "submission_uncertain"] },
       },
-      data: { details: jsonValue({ ...currentDetails, tailoring: saved }) },
+      data: {
+        details: jsonValue({ ...currentDetails, tailoring: saved, documentEdits: undefined }),
+      },
     });
     if (update.count !== 1)
       throw conflict(

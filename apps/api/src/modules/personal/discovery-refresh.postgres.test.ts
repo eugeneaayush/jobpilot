@@ -1,5 +1,6 @@
 import path from "node:path";
 import { EMPTY_RESUME_DATA } from "@jobpilot/contracts/resume";
+import { PersonalApprovalService } from "./approval.service";
 import { PersonalDiscoveryService, saveDiscoveredRecord } from "./discovery.service";
 import {
   createPersonalTestDatabase,
@@ -20,6 +21,55 @@ describe.skipIf(!testUrl)("discovery refresh preserves concurrent records", () =
   }, 30000);
   afterAll(async () => {
     if (db) await db.dispose();
+  });
+
+  it("preserves append-only approval history while changed posting evidence invalidates readiness", async () => {
+    const f = await personalFixture(db);
+    const { record } = await f.record("42", "https://example.test/jobs/42");
+    const history = objectValue(record.details).applicationApprovals;
+    expect(Array.isArray(history) && history.length > 0).toBe(true);
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input) => {
+      expect(String(input)).toBe(
+        "https://boards-api.greenhouse.io/v1/boards/synthetic/jobs?content=true",
+      );
+      return Response.json({
+        meta: { total: 1 },
+        jobs: [
+          {
+            id: 42,
+            title: "Updated MBA internship",
+            company_name: "Synthetic Employer",
+            absolute_url: record.url,
+            location: { name: "New York, NY" },
+            content:
+              "<p>This paid internship recruits MBA students. The internship runs from June 2027 to August 2027. Updated responsibilities include research for our clients.</p>",
+          },
+        ],
+      });
+    }) as typeof fetch;
+    try {
+      const service = new PersonalDiscoveryService(db.prisma, {
+        resumeData: async () => ({ data: EMPTY_RESUME_DATA, evidence: f.resume }),
+      } as unknown as PersonalService);
+      expect((await service.discover(f.user.id, { boardToken: "synthetic" })).status).toBe(
+        "complete",
+      );
+      const updated = await db.prisma.personalRecord.findUniqueOrThrow({
+        where: { id: record.id },
+      });
+      expect(objectValue(updated.details).applicationApprovals).toEqual(history);
+      expect(objectValue(updated.details).preview).toBeUndefined();
+      const review = await new PersonalApprovalService(db.prisma, db.service).get(
+        f.user.id,
+        record.id,
+        "session",
+      );
+      expect(review.approval?.status).toBe("stale");
+      expect(review.blockers.length).toBeGreaterThan(0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it("keeps a current manual eligibility decision and unanswered screening question through routine discovery, then invalidates changed requirements", async () => {

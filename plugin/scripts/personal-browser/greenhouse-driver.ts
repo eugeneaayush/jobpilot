@@ -67,7 +67,7 @@ export class GreenhouseDriver implements BrowserDriver {
   private context?: BrowserContext;
   private page?: Page;
   private identity?: GreenhouseIdentity;
-  private filled: Record<string, string | boolean> = {};
+  private filled: Record<string, string | boolean | string[]> = {};
   private selections: Record<string, { label: string; value: string }> = {};
   private presigns: Record<string, GreenhousePresign> = {};
   private initialUrl = "";
@@ -112,7 +112,13 @@ export class GreenhouseDriver implements BrowserDriver {
       return false;
     }
   }
-  answerMatches(field: Field, value: string | boolean) {
+  answerMatches(field: Field, value: string | boolean | string[]) {
+    if (Array.isArray(value))
+      return (
+        !!field.multiple &&
+        field.selectedValues?.length === value.length &&
+        value.every((item) => field.selectedValues!.includes(item))
+      );
     if (field.type === "checkbox") return field.checked === value;
     if (field.value === value) return true;
     const choices = this.identity?.choices[field.name] ?? [];
@@ -716,15 +722,13 @@ export class GreenhouseDriver implements BrowserDriver {
       submitAction: this.identity.targetUrl,
     };
   }
-  async fill(field: Field, value: string | boolean) {
+  async fill(field: Field, value: string | boolean | string[]) {
     if (!this.page || !this.identity || !("adapter" in field) || field.adapter !== "greenhouse")
       throw new Error("Invalid Greenhouse field");
     await this.scope!.authorize();
     const mapped = this.identity?.choices[field.name]?.filter((choice) => choice.value === value);
-    this.lookup = {
-      name: field.name,
-      value: mapped?.length === 1 ? mapped[0]!.label : String(value),
-    };
+    if (typeof value === "string")
+      this.lookup = { name: field.name, value: mapped?.length === 1 ? mapped[0]!.label : value };
     try {
       await fillGreenhouseField(this.page, field as GreenhouseField, value, {
         phoneCountryDialCode: this.phoneCountryDialCode,

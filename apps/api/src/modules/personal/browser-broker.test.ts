@@ -85,6 +85,8 @@ async function fixture(
           state = "prepared";
           return Response.json({ state });
         }
+        if (route.endsWith("/authorize-transmission"))
+          return Response.json({ status: "authorized" });
         if (route.endsWith("/begin-submit")) {
           state = "submitting";
           return Response.json({ state });

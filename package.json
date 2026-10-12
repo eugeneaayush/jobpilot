@@ -8,6 +8,7 @@
   ],
   "scripts": {
     "personal:doctor": "bun scripts/personal/cli.ts doctor",
+    "personal:tools:setup": "bun scripts/personal/cli.ts tools-setup",
     "personal:recruiting": "bun scripts/personal/recruiting.ts",
     "personal:setup": "bun scripts/personal/cli.ts setup",
     "personal:dev": "bun scripts/personal/cli.ts dev",

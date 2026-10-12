@@ -1,6 +1,7 @@
 import type { PersonalSettings } from "@jobpilot/contracts/personal";
 import type {
   PersonalReadiness,
+  PersonalScreeningAnswer,
   PersonalTerminalReadiness,
 } from "@jobpilot/contracts/personal-readiness";
 import { z } from "zod";
@@ -115,7 +116,7 @@ export function missingPersonalSettings(
 }
 
 export function requireSettingsAnswer(
-  value: string | boolean,
+  value: PersonalScreeningAnswer["value"],
   settings: PersonalSettings,
   pointer: string,
   postingLocation: string | null,
@@ -154,13 +155,64 @@ export function exactPointerValue(value: unknown, pointer: string): unknown {
   return current;
 }
 
-export function requireExactAnswer(value: string | boolean, source: unknown) {
-  if (
-    typeof value === "boolean"
-      ? source !== value
-      : !["string", "boolean", "number"].includes(typeof source) || String(source) !== value
-  )
+export function requireExactAnswer(value: PersonalScreeningAnswer["value"], source: unknown) {
+  let exact: boolean;
+  if (Array.isArray(value))
+    exact =
+      Array.isArray(source) &&
+      source.every((item) => typeof item === "string") &&
+      JSON.stringify(value) === JSON.stringify(source);
+  else if (typeof value === "boolean") exact = source === value;
+  else exact = ["string", "boolean", "number"].includes(typeof source) && String(source) === value;
+  if (!exact)
     throw conflict(
       "Answer must exactly match the known source value; use explicit user confirmation for a different wording",
     );
+}
+
+interface ScreeningQuestion {
+  fieldName: string;
+  label: string;
+  multiple?: boolean;
+  options?: { value: string; label: string }[];
+}
+
+export function answeredScreeningFields(
+  answers: PersonalScreeningAnswer[],
+  questions: ScreeningQuestion[],
+) {
+  const answered = new Set<string>();
+  const label = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
+  for (const question of questions) {
+    const matching = answers.filter((answer) => {
+      if (answer.fieldName) return answer.fieldName === question.fieldName;
+      return (
+        !!answer.label &&
+        label(answer.label) === label(question.label) &&
+        questions.filter((other) => label(other.label) === label(question.label)).length === 1
+      );
+    });
+    if (
+      matching.length !== 1 ||
+      questions.filter((other) => other.fieldName === question.fieldName).length !== 1
+    )
+      continue;
+    const value = matching[0]!.value;
+    if (Array.isArray(value)) {
+      if (
+        !question.multiple ||
+        !question.options ||
+        value.some(
+          (item) => question.options!.filter((option) => option.value === item).length !== 1,
+        )
+      )
+        throw conflict(
+          "Selection answers must match the complete observed multiselect option inventory",
+        );
+      if (value.length) answered.add(question.fieldName);
+    } else if (question.multiple)
+      throw conflict("Observed multiselect requires an explicit answer set");
+    else if (typeof value === "boolean" || value.trim()) answered.add(question.fieldName);
+  }
+  return answered;
 }

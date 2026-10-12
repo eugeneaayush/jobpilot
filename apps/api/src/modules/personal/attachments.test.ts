@@ -16,6 +16,7 @@ import {
   verifyAttachmentManifest,
 } from "./attachments-policy";
 import { coverLetterContent, generateCoverLetter } from "./document/cover-letter";
+import { documentPipelineInputs } from "./local-tools/pipeline-config";
 import { manifestHash } from "./persistence-policy";
 import { sha256 } from "./runtime";
 import { describe, expect, test } from "bun:test";
@@ -152,10 +153,10 @@ describe("personal attachment evidence", () => {
       company: "Synthetic Fund",
     });
     expect(resume).toEqual(before);
-    expect(content.paragraphs[2]).toBe(
+    expect(content.paragraphs).toContain(
       "My education includes MBA, expected 2028 at Synthetic School.",
     );
-    expect(content.paragraphs[3]).toBe(
+    expect(content.paragraphs).toContain(
       "My experience includes Analytics Manager at Synthetic Hospital.",
     );
     expect(content.paragraphs.join("\n")).toContain("Analyzed a $12M investment portfolio.");
@@ -272,7 +273,71 @@ describe("personal attachment evidence", () => {
         reviewedAt: new Date().toISOString(),
         reviewer: userId,
       };
+      // Historical visual review alone cannot grandfather an artifact into live readiness.
+      expect(attachmentStatus(inventory, [attachment]).readiness).toBe("draft");
+      attachment.verification = {
+        status: "passed",
+        artifactSha256: attachment.sha256,
+        verifierVersion: "1",
+        verifierConfigHash: documentPipelineInputs("cbs-cover-letter").verifierConfigHash,
+        renderer: "cbs-cover-letter",
+        pageCount: 1,
+        extractedCharacters: 100,
+        checks: [
+          "artifact_hash",
+          "page_limit",
+          "text_layer",
+          "glyphs",
+          "renderer_margins",
+          "layout_bounds",
+        ].map((code) => ({
+          code,
+          status: "passed" as const,
+          message: "Synthetic boundary fixture",
+        })),
+      };
+      expect(attachmentStatus(inventory, [attachment]).readiness).toBe("draft");
+      attachment.pipeline = {
+        ...documentPipelineInputs("cbs-cover-letter"),
+        renderer: "cbs-cover-letter",
+      };
+      const reportBytes = JSON.stringify(attachment.verification, null, 2);
+      const reportPath = join(artifactRoot, "document-checks", `${sha256(reportBytes)}.json`);
+      await mkdir(join(artifactRoot, "document-checks"));
+      await writeFile(reportPath, reportBytes, { mode: 0o600 });
+      for (const field of [
+        "rendererConfigHash",
+        "verifierConfigHash",
+        "documentPipelineVersion",
+      ] as const) {
+        const stale = {
+          ...attachment,
+          pipeline: { ...attachment.pipeline, [field]: "0".repeat(64) },
+        };
+        expect(attachmentStatus(inventory, [stale]).readiness).toBe("draft");
+      }
+      expect(
+        attachmentStatus(inventory, [
+          {
+            ...attachment,
+            verification: { ...attachment.verification, verifierConfigHash: "0".repeat(64) },
+          },
+        ]).readiness,
+      ).toBe("draft");
+      expect(
+        attachmentStatus(inventory, [
+          {
+            ...attachment,
+            verification: { ...attachment.verification, artifactSha256: "0".repeat(64) },
+          },
+        ]).readiness,
+      ).toBe("draft");
       await verifyAttachmentManifest(db, userId, record, manifest, true, evidence);
+      await rm(reportPath);
+      await expect(
+        verifyAttachmentManifest(db, userId, record, manifest, true, evidence),
+      ).rejects.toThrow();
+      await writeFile(reportPath, reportBytes, { mode: 0o600 });
       await expect(
         verifyAttachmentManifest(
           db,

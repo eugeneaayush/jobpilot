@@ -8,6 +8,7 @@ import {
 import { singleton } from "tsyringe";
 import { conflict, notFound } from "@/common/errors";
 import { type Prisma, PrismaClient } from "@/generated/prisma/client";
+import { PersonalAttemptService } from "./attempt.service";
 import { manifestHash, privateArtifactRoot, readPrivateArtifact } from "./persistence-policy";
 import { jsonValue, objectValue, sha256 } from "./runtime";
 
@@ -17,7 +18,10 @@ const active = ["opening", "open", "resuming"];
 
 @singleton()
 export class PersonalHandoffService {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly attempts: PersonalAttemptService,
+  ) {}
 
   private locked<T>(userId: string, work: (tx: Prisma.TransactionClient) => Promise<T>) {
     return this.prisma.$transaction(
@@ -90,6 +94,7 @@ export class PersonalHandoffService {
         attempt.leaseExpiresAt <= new Date()
       )
         throw conflict("A current preparation lease is required to park a security handoff.");
+      await this.attempts.verifyLiveApproval(tx, userId, attempt);
       const details = objectValue(attempt.record.details);
       const now = new Date();
       const handoff: PersonalHandoff = {
@@ -158,6 +163,26 @@ export class PersonalHandoffService {
     });
   }
 
+  async authorize(userId: string, attemptId: string, input: PersonalHandoffLease) {
+    return this.locked(userId, async (tx) => {
+      const attempt = await this.owned(tx, userId, attemptId);
+      const handoff = personalHandoffResponseSchema.parse(
+        objectValue(attempt.record.details).handoff,
+      );
+      if (
+        attempt.state !== "blocked" ||
+        handoff.status !== "open" ||
+        handoff.handoffId !== input.handoffId ||
+        handoff.leaseOwner !== input.leaseOwner ||
+        handoff.leaseGeneration !== input.leaseGeneration ||
+        Date.parse(handoff.leaseExpiresAt) <= Date.now()
+      )
+        throw conflict("A current open handoff lease is required for authentication transmission");
+      await this.attempts.verifyLiveApproval(tx, userId, attempt);
+      return handoff;
+    });
+  }
+
   async transition(
     userId: string,
     attemptId: string,
@@ -177,6 +202,7 @@ export class PersonalHandoffService {
         handoff.leaseGeneration !== input.leaseGeneration
       )
         throw conflict("Browser handoff ownership changed");
+      if (action !== "cancel") await this.attempts.verifyLiveApproval(tx, userId, attempt);
       const now = new Date();
       const startedAt =
         typeof details.handoffStartedAt === "string"

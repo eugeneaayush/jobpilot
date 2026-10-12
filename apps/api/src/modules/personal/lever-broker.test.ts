@@ -18,7 +18,7 @@ const posting = "https://jobs.lever.co/synthetic/44444444-4444-4444-8444-4444444
 const identity = "lever:global:synthetic:44444444-4444-4444-8444-444444444444";
 const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
-async function fixture(mode: "accepted" | "challenge" | "reject_freeze") {
+async function fixture(mode: "accepted" | "challenge" | "reject_freeze" | "approval_revoked") {
   const root = await mkdtemp(join(tmpdir(), "lever-broker-synthetic-"));
   const userRoot = join(root, "storage", userId);
   await mkdir(userRoot, { recursive: true });
@@ -88,6 +88,11 @@ async function fixture(mode: "accepted" | "challenge" | "reject_freeze") {
       });
     if (req.method !== "POST") return new Response(null, { status: 404 });
     const body = await req.json();
+    if (path.endsWith("/authorize-transmission"))
+      return Response.json(
+        { authorized: mode !== "approval_revoked" },
+        { status: mode === "approval_revoked" ? 409 : 200 },
+      );
     if (path.endsWith("/prepare")) {
       state = "prepared";
       return Response.json({ state });
@@ -151,6 +156,17 @@ async function fixture(mode: "accepted" | "challenge" | "reject_freeze") {
 }
 
 describe("Lever broker integration without external network", () => {
+  test("revoked application approval prevents hosted field transmission", async () => {
+    const f = await fixture("approval_revoked");
+    try {
+      const form = await f.broker.inspectForm();
+      const email = form.fields.find((field) => field.type === "email")!;
+      await expect(f.broker.fillField(email.ref, email.answerKey!)).rejects.toThrow("API refused");
+      expect(f.frozen()).toBeUndefined();
+    } finally {
+      await f.close();
+    }
+  });
   test.each([
     "accepted",
     "challenge",

@@ -8,6 +8,7 @@ import {
   createPersonalTestDatabase,
   type PersonalTestDatabase,
   personalFixture,
+  refreshPersonalFixtureApproval,
 } from "./persistence-test-fixtures";
 import { jsonValue, objectValue, sha256 } from "./runtime";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
@@ -169,6 +170,7 @@ describe.skipIf(!testUrl)("employer job submission identity", () => {
         }),
       },
     });
+    await refreshPersonalFixtureApproval(db, f.user.id, record.id, item.input.manifest);
     const attempt = await db.service.start(f.user.id, item.input);
     await db.service.prepare(f.user.id, attempt.id, attempt);
     await withJob(evaluated, "457");

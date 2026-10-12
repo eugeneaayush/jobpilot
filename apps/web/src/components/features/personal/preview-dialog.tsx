@@ -160,6 +160,19 @@ export function PreviewDialog(props: PreviewDialogProps): ReactElement {
             <LabelValue label="PDF hash">
               <CopyField value={preview.pdfHash} ariaLabel="Copy PDF hash" />
             </LabelValue>
+            <Alert
+              severity={record.documentVerification?.status === "passed" ? "success" : "warning"}
+            >
+              Document checks: {record.documentVerification?.status ?? "pending"}. Automated checks
+              supplement visual inspection.
+              {record.documentVerification?.checks
+                .filter((check) => check.status !== "passed")
+                .map((check) => (
+                  <Typography key={check.code} variant="body2">
+                    {check.message}
+                  </Typography>
+                ))}
+            </Alert>
             <LabelValue label="Manifest hash">
               <CopyField value={preview.manifestHash} ariaLabel="Copy manifest hash" />
             </LabelValue>

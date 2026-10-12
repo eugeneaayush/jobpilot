@@ -28,7 +28,10 @@ import type { PaginationParams } from "@/hooks/use-pagination";
 import { gridPagination } from "@/hooks/use-pagination";
 import { plural } from "@/utils/format";
 import { AnswersDialog } from "./answers-dialog";
+import { ApplicationReviewDialog } from "./application-review-dialog";
 import { AttachmentsDialog } from "./attachments-dialog";
+import { FitEvidenceDialog } from "./fit-evidence-dialog";
+import { FollowupsDialog } from "./followups-dialog";
 import {
   ELIGIBILITY_COLOR,
   ELIGIBILITY_LABEL,
@@ -42,6 +45,7 @@ import {
 } from "./personal-labels";
 import { PreviewDialog } from "./preview-dialog";
 import { RecoveryDialog } from "./recovery-dialog";
+import { ResumeYamlDialog } from "./resume-yaml-dialog";
 import { SeniorityAssessment } from "./seniority-assessment";
 
 /** Rows in these states get the Recover action; uncertain ones open reconcile-first. */
@@ -76,6 +80,10 @@ export function RecordsTable(props: RecordsTableProps): ReactElement {
   const [answersFor, setAnswersFor] = useState<PersonalRecordDto | null>(null);
   const [recovering, setRecovering] = useState<PersonalRecordDto | null>(null);
   const [filesFor, setFilesFor] = useState<PersonalRecordDto | null>(null);
+  const [approvalFor, setApprovalFor] = useState<PersonalRecordDto | null>(null);
+  const [fitFor, setFitFor] = useState<PersonalRecordDto | null>(null);
+  const [yamlFor, setYamlFor] = useState<string | null>(null);
+  const [followupFor, setFollowupFor] = useState<PersonalRecordDto | null>(null);
   const [seniorityFor, setSeniorityFor] = useState<PersonalRecordDto | null>(null);
   // Retain a mutation response until the list catches up, then use its freshest version.
   const latestRecord = (selected: PersonalRecordDto | null): PersonalRecordDto | null => {
@@ -210,6 +218,15 @@ export function RecordsTable(props: RecordsTableProps): ReactElement {
       align: "right",
       headerAlign: "right",
       valueGetter: (_v, row) => row.fitScore ?? "—",
+      renderCell: (p) => (
+        <Button
+          size="small"
+          aria-label={`Fit evidence for ${p.row.title}`}
+          onClick={() => setFitFor(p.row)}
+        >
+          {p.row.fitScore ?? "—"}
+        </Button>
+      ),
     },
     {
       // API-authoritative seniority: chips only when classified; absence renders nothing.
@@ -266,13 +283,24 @@ export function RecordsTable(props: RecordsTableProps): ReactElement {
     {
       field: "actions",
       headerName: "",
-      width: 410,
+      width: 680,
       sortable: false,
       filterable: false,
       align: "right",
       headerAlign: "right",
       renderCell: (p) => (
         <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+          <Button size="small" onClick={() => setApprovalFor(p.row)}>
+            Review application
+          </Button>
+          <Button size="small" onClick={() => setYamlFor(p.row.id)}>
+            YAML
+          </Button>
+          {p.row.state === "submitted" && (
+            <Button size="small" onClick={() => setFollowupFor(p.row)}>
+              Follow-up draft
+            </Button>
+          )}
           <Tooltip
             describeChild
             title="Answer this job's screening questions. Nothing is autofilled."
@@ -347,7 +375,7 @@ export function RecordsTable(props: RecordsTableProps): ReactElement {
   return (
     <SectionCard
       title="Records"
-      description="Every discovered role by track. Previews are offline; nothing is submitted from here."
+      description="Every discovered role by track. Previews are offline. Live applications require approval of exact answers and files."
     >
       <Stack
         direction={{ xs: "column", md: "row" }}
@@ -378,6 +406,26 @@ export function RecordsTable(props: RecordsTableProps): ReactElement {
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
       />
+      {approvalFor && (
+        <ApplicationReviewDialog
+          key={approvalFor.id}
+          record={latestRecord(approvalFor)!}
+          onClose={() => setApprovalFor(null)}
+        />
+      )}
+      {fitFor && (
+        <FitEvidenceDialog record={latestRecord(fitFor)!} onClose={() => setFitFor(null)} />
+      )}
+      {yamlFor && (
+        <ResumeYamlDialog key={yamlFor} recordId={yamlFor} onClose={() => setYamlFor(null)} />
+      )}
+      {followupFor && (
+        <FollowupsDialog
+          key={followupFor.id}
+          record={latestRecord(followupFor)!}
+          onClose={() => setFollowupFor(null)}
+        />
+      )}
       <AnswersDialog
         record={currentAnswers}
         open={answersFor !== null}

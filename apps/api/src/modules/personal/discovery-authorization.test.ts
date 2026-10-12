@@ -5,6 +5,7 @@ import { env } from "@/env";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { PersonalDiscoveryService } from "./discovery.service";
 import { verifyDiscoveryAuthorization } from "./discovery-authorization";
+import type { PersonalLeadsService } from "./leads/leads.service";
 import type { PersonalService } from "./personal.service";
 import { PersonalSearchService } from "./search/search.service";
 import { afterEach, beforeEach, expect, test } from "bun:test";
@@ -34,6 +35,7 @@ function fixture() {
     enabled: true,
     policyVersion: "test",
     mode: "offline",
+    approvalPolicy: "per-application-v1",
     tracks: ["mba_internship"],
     sources: {
       boardTokens: ["alpha"],
@@ -222,7 +224,7 @@ test("search rejects a superseded run before provider setup, spend, or receipt w
       },
     },
   } as unknown as PrismaClient;
-  const service = new PersonalSearchService(prisma);
+  const service = new PersonalSearchService(prisma, {} as PersonalLeadsService);
   await expect(
     service.search(f.userId, {
       ...f.input,

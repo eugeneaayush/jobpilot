@@ -77,6 +77,7 @@ describe("personal persistence policy", () => {
     const personal: ReturnType<typeof readAttemptPolicy> = {
       enabled: true,
       mode: "submit",
+      approvalPolicy: "per-application-v1",
       dailyCap: 1,
       maxApplications: 3,
       timezone: "America/New_York",

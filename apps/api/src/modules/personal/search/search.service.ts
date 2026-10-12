@@ -2,13 +2,17 @@ import type { PersonalSearchInput } from "@jobpilot/contracts/personal-search";
 import { singleton } from "tsyringe";
 import { PrismaClient } from "@/generated/prisma/client";
 import { verifyDiscoveryAuthorization } from "../discovery-authorization";
+import { PersonalLeadsService } from "../leads/leads.service";
 import { jsonValue, personalConfiguration } from "../runtime";
 import { finishPersonalSearchSpend, reservePersonalSpend } from "./budget";
 import { runPersonalSearch } from "./search";
 
 @singleton()
 export class PersonalSearchService {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly leads: PersonalLeadsService,
+  ) {}
 
   async search(userId: string, input: PersonalSearchInput) {
     await verifyDiscoveryAuthorization(this.prisma, userId, input);
@@ -46,6 +50,7 @@ export class PersonalSearchService {
         }),
       },
     });
+    await this.leads.importBrave(userId, result);
     return result;
   }
 }

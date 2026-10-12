@@ -19,6 +19,8 @@ import {
   storedRequirements,
 } from "./attachments-policy";
 import { generateCoverLetter } from "./document/cover-letter";
+import { verifyDocumentForUser } from "./local-tools/document-check";
+import { documentPipelineInputs, documentPipelineMatches } from "./local-tools/pipeline-config";
 import {
   manifestHash,
   privateArtifactRoot,
@@ -181,6 +183,7 @@ export class PersonalAttachmentsService {
         citations: generated.citations,
       },
       review: null,
+      pipeline: { ...documentPipelineInputs("cbs-cover-letter"), renderer: "cbs-cover-letter" },
     };
     const updated = await this.change(userId, recordId, (current) => {
       if (current.updatedAt.getTime() !== record.updatedAt.getTime())
@@ -205,7 +208,30 @@ export class PersonalAttachmentsService {
   }
 
   async review(userId: string, recordId: string, input: PersonalAttachmentReviewInput) {
+    const initial = await this.owned(this.prisma, userId, recordId);
+    const artifact = storedAttachments(initial.details).find(
+      (entry) => entry.id === input.attachmentId,
+    );
+    if (!artifact || artifact.sha256 !== input.pdfHash)
+      throw conflict("Review belongs to a different attachment version");
+    if (!documentPipelineMatches(artifact.pipeline, "cbs-cover-letter"))
+      throw conflict("Attachment renderer configuration changed; regenerate before review");
+    const artifactBytes = await readPrivateArtifact(artifact.path, privateArtifactRoot(userId));
+    if (sha256(artifactBytes) !== input.pdfHash)
+      throw conflict("Attachment PDF failed its integrity check");
+    const accepted = await this.personal.resumeData(userId);
+    const verification = await verifyDocumentForUser(userId, artifactBytes, {
+      requiredText: [
+        accepted.data.basics.name,
+        accepted.data.basics.email,
+        accepted.data.basics.phone,
+      ].filter((value): value is string => typeof value === "string" && !!value),
+      maxPages: 1,
+      renderer: "cbs-cover-letter",
+    });
     const updated = await this.change(userId, recordId, async (record) => {
+      if (record.updatedAt.getTime() !== initial.updatedAt.getTime())
+        throw conflict("Attachment changed during document verification");
       const details = objectValue(record.details);
       const documents = storedAttachments(details);
       const document = documents.find((entry) => entry.id === input.attachmentId);
@@ -246,10 +272,16 @@ export class PersonalAttachmentsService {
         ...details,
         attachmentRequirements: inventory,
         attachments: documents.map((entry) =>
-          entry.id === document.id ? { ...entry, review } : entry,
+          entry.id === document.id
+            ? { ...entry, verification, review: verification.status === "passed" ? review : null }
+            : entry,
         ),
       };
     });
+    if (verification.status !== "passed")
+      throw conflict(
+        "Attachment checks did not pass; inspect document verification and local tools",
+      );
     return this.response(updated, storedRequirements(updated));
   }
 

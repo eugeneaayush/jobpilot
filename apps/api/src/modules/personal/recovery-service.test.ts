@@ -87,6 +87,7 @@ function fixture(descriptionText = description, location = "New York, NY", appro
             enabled: false,
             policyVersion: "test",
             mode: "offline",
+            approvalPolicy: "per-application-v1",
             sources: { boardTokens: ["synthetic"] },
             tracks: ["mba_internship"],
             fitThreshold: 0,

@@ -40,6 +40,7 @@ async function fixture(
   let outsideRequests = 0;
   let challenge = options.challenge ?? false;
   let revoked = false;
+  let applicationApprovalRevoked = false;
   const requests: string[] = [];
   const outside = Bun.serve({
     hostname: "127.0.0.1",
@@ -58,6 +59,11 @@ async function fixture(
       if (url.pathname.startsWith("/api/")) {
         if (request.headers.get("authorization") !== "Bearer synthetic-bearer")
           return new Response(null, { status: 401 });
+        if (url.pathname.endsWith("/handoff/authorize"))
+          return Response.json(
+            { approved: !applicationApprovalRevoked },
+            { status: applicationApprovalRevoked ? 409 : 200 },
+          );
         if (url.pathname.endsWith("/handoff"))
           return Response.json({
             handoffId,
@@ -132,6 +138,9 @@ async function fixture(
     create,
     clear: () => {
       challenge = false;
+    },
+    withdrawApproval: () => {
+      applicationApprovalRevoked = true;
     },
     revoke: () => {
       revoked = true;
@@ -264,6 +273,28 @@ describe("local browser handoff isolation", () => {
     }
   }, 20_000);
 
+  test("withdrawn application approval blocks authentication despite a current handoff lease", async () => {
+    const setup = await fixture();
+    const browser = setup.create();
+    try {
+      await browser.open();
+      setup.withdrawApproval();
+      const page = (browser as unknown as { page: Page }).page;
+      expect(
+        await page.evaluate(() =>
+          fetch("/login", { method: "POST", body: "synthetic-credential" }).then(
+            () => true,
+            () => false,
+          ),
+        ),
+      ).toBe(false);
+      expect(setup.requests).not.toContain("POST /login");
+      await expect(browser.resume()).rejects.toThrow("Handoff scope unavailable");
+    } finally {
+      await browser.close();
+      await setup.close();
+    }
+  }, 20_000);
   test("an authorized authentication response remains available for a separate verified navigation", async () => {
     const setup = await fixture();
     const browser = setup.create();

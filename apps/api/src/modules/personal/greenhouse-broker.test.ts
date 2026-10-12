@@ -138,6 +138,7 @@ async function fixture(
     requiredConsent?: boolean;
     consentAnswer?: boolean;
     startPrepared?: boolean;
+    authorityRevoked?: boolean;
   } = {},
 ) {
   const root = await mkdtemp(join(tmpdir(), "greenhouse-broker-test-"));
@@ -225,6 +226,11 @@ async function fixture(
           });
         if (request.method !== "POST") return new Response(null, { status: 404 });
         const body = await request.json();
+        if (route === "/authorize-transmission")
+          return Response.json(
+            { authorized: !options.authorityRevoked },
+            { status: options.authorityRevoked ? 409 : 200 },
+          );
         if (route === "/prepare") {
           state = "prepared";
           return Response.json({ state });
@@ -316,6 +322,16 @@ async function prepare(f: Awaited<ReturnType<typeof fixture>>) {
 }
 
 describe("Greenhouse broker transport boundaries", () => {
+  test("revoked application approval prevents hosted field transmission", async () => {
+    const f = await fixture("submit", { authorityRevoked: true });
+    try {
+      await expect(prepare(f)).rejects.toThrow("API refused");
+      expect(f.frozen()).toBeUndefined();
+      expect(f.events).not.toContain("driver:submit");
+    } finally {
+      await f.close();
+    }
+  });
   test("offline never configures or opens the injected employer driver", async () => {
     const f = await fixture("offline");
     try {

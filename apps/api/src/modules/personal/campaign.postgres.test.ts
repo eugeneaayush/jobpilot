@@ -2,8 +2,10 @@ import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { EMPTY_RESUME_DATA } from "@jobpilot/contracts/resume";
 import { env } from "@/env";
+import { PersonalApprovalService } from "./approval.service";
 import { PersonalCampaignService } from "./campaign.service";
 import { eligibilityContext } from "./eligibility-freshness";
+import { documentPipelineInputs } from "./local-tools/pipeline-config";
 import { manifestHash } from "./persistence-policy";
 import {
   createPersonalTestDatabase,
@@ -91,7 +93,12 @@ describe.skipIf(!testUrl)("personal campaign PostgreSQL lifecycle", () => {
             ...previewAttachments,
             previewAttachments,
             fitScore: 90,
-            document: { path: f.artifactPath, sha256: db.hash },
+            document: {
+              ...documentPipelineInputs("cbs-letter-times"),
+              template: "cbs-letter-times",
+              path: f.artifactPath,
+              sha256: db.hash,
+            },
             manifestPath,
             preview: {
               ...objectValue(objectValue(r.record.details).preview),
@@ -111,7 +118,24 @@ describe.skipIf(!testUrl)("personal campaign PostgreSQL lifecycle", () => {
         },
       });
     }
-    return { ...f, configured, ready, service, settings };
+    async function approvePrepared() {
+      if (mode === "offline") return;
+      const approvals = new PersonalApprovalService(db.prisma, db.service);
+      const records = await db.prisma.personalRecord.findMany({
+        where: { userId: f.user.id, state: "prepared" },
+      });
+      for (const record of records) {
+        const review = await approvals.get(f.user.id, record.id, "synthetic-session");
+        if (review.blockers.length || !review.packet) continue;
+        await approvals.approve(f.user.id, record.id, "synthetic-session", {
+          expectedRecordVersion: review.recordVersion.toISOString(),
+          packetHash: review.packetHash,
+          nonce: review.nonce,
+          confirm: true,
+        });
+      }
+    }
+    return { ...f, configured, ready, service, settings, approvePrepared };
   }
 
   it("creates stopped campaigns and excludes legacy or foreign campaigns from lists", async () => {
@@ -139,6 +163,7 @@ describe.skipIf(!testUrl)("personal campaign PostgreSQL lifecycle", () => {
     const lowFit = await f.ready({ fitScore: 5 });
     const ready = await f.ready();
     const launched = await f.service.launch(f.user.id, f.configured.id, true);
+    await f.approvePrepared();
     expect(launched.authorization?.sourceHash).toBe(db.hash);
     const next = await f.service.next(f.user.id, f.configured.id, "supervisor");
     expect(next.status).toBe("task");
@@ -159,6 +184,7 @@ describe.skipIf(!testUrl)("personal campaign PostgreSQL lifecycle", () => {
     await f.ready();
     await f.ready();
     await f.service.launch(f.user.id, f.configured.id, true);
+    await f.approvePrepared();
     const results = await Promise.all([
       f.service.next(f.user.id, f.configured.id, "one"),
       f.service.next(f.user.id, f.configured.id, "two"),
@@ -172,6 +198,7 @@ describe.skipIf(!testUrl)("personal campaign PostgreSQL lifecycle", () => {
     await f.ready();
     await f.ready();
     await f.service.launch(f.user.id, f.configured.id, true);
+    await f.approvePrepared();
     const first = await f.service.next(f.user.id, f.configured.id, "one");
     const second = await f.service.next(f.user.id, f.configured.id, "two");
     if (first.status !== "task" || second.status !== "task") throw new Error("Missing tasks");
@@ -210,6 +237,7 @@ describe.skipIf(!testUrl)("personal campaign PostgreSQL lifecycle", () => {
     });
     await f.ready();
     await f.service.launch(f.user.id, f.configured.id, true);
+    await f.approvePrepared();
     const first = await f.service.next(f.user.id, f.configured.id, "offline");
     if (first.status !== "task") throw new Error("No offline task");
     expect(first.task.kind).toBe("offline_preview");
@@ -253,6 +281,7 @@ describe.skipIf(!testUrl)("personal campaign PostgreSQL lifecycle", () => {
       } as unknown as PersonalService;
       await new PersonalPreviewService(db.prisma, previewPersonal).preview(f.user.id, record.id);
       await f.service.launch(f.user.id, f.configured.id, true);
+      await f.approvePrepared();
       const next = await f.service.next(f.user.id, f.configured.id, "real-preview-test");
       expect(next.status).toBe("task");
       if (next.status !== "task") throw new Error(next.reasons.join("; "));
@@ -283,6 +312,7 @@ describe.skipIf(!testUrl)("personal campaign PostgreSQL lifecycle", () => {
     const f = await fixture("offline", 1);
     await f.ready();
     await f.service.launch(f.user.id, f.configured.id, true);
+    await f.approvePrepared();
     const first = await f.service.next(f.user.id, f.configured.id, "durable-supervisor");
     if (first.status !== "task") throw new Error("No task");
     const replay = await f.service.next(f.user.id, f.configured.id, "durable-supervisor");
@@ -302,6 +332,7 @@ describe.skipIf(!testUrl)("personal campaign PostgreSQL lifecycle", () => {
     const f = await fixture("offline", 1);
     await f.ready();
     await f.service.launch(f.user.id, f.configured.id, true);
+    await f.approvePrepared();
     const first = await f.service.next(f.user.id, f.configured.id, "lost-supervisor");
     if (first.status !== "task") throw new Error("No task");
     await db.prisma.personalAttempt.update({
@@ -324,6 +355,7 @@ describe.skipIf(!testUrl)("personal campaign PostgreSQL lifecycle", () => {
     const f = await fixture("offline");
     await f.ready();
     await f.service.launch(f.user.id, f.configured.id, true);
+    await f.approvePrepared();
     const first = await f.service.next(f.user.id, f.configured.id, "same-supervisor");
     expect(first.status).toBe("task");
     await writeFile(f.artifactPath, "Changed document bytes");

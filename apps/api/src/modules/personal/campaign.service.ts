@@ -72,6 +72,7 @@ export class PersonalCampaignService {
             sources: { ...input.sources, boardTokens: [...new Set(input.sources.boardTokens)] },
             tracks: [...new Set(input.tracks)],
             scheduler: "personal-campaign-v1",
+            approvalPolicy: "per-application-v1",
             enabled: false,
             policyVersion: crypto.randomUUID(),
             authorization: null,

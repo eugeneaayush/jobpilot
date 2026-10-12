@@ -14,40 +14,68 @@ import { SectionCard } from "@/components/ui/layout";
 const triState = z.enum(["", "yes", "no"]);
 const periodState = z.enum(["", "year", "hour"]);
 
-const settingsFormSchema = z.object({
-  mbaEnrolled: triState,
-  graduationYear: z.union([z.number().int().min(2000).max(2100), z.null()]),
-  availableFrom: z.string(),
-  availableUntil: z.string(),
-  locationsText: z.string(),
-  targetFunctionsText: z.string(),
-  exclusionsText: z.string(),
-  minimumCompensation: z.union([z.number().nonnegative(), z.null()]),
-  // Currency/period are stated, never inferred: no USD/year default exists anywhere.
-  // "" is the form's unset state — the mapping sends null, so it must validate.
-  compensationCurrency: z.union([
-    z.string().regex(/^[A-Z]{3}$/, "Three uppercase letters."),
-    z.literal(""),
-    z.null(),
-  ]),
-  compensationPeriod: periodState,
-  workAuthorization: triState,
-  requiresSponsorship: triState,
-  // ISO 3166-1 alpha-2 only; the field uppercases as you type.
-  authorizationCountriesText: z
-    .string()
-    .refine(
-      (text) => splitList(text).every((code) => /^[A-Z]{2}$/.test(code)),
-      "Two-letter country codes, e.g. US, DE.",
+const settingsFormSchema = z
+  .object({
+    resumeRenderer: z.enum(["cbs-letter-times", "rendercv-classic"]),
+    skillExperienceText: z.string().refine(
+      (value) =>
+        value
+          .split("\n")
+          .filter((line) => line.trim())
+          .every(
+            (line) =>
+              /^.{1,150}:\s*(?:\d+(?:\.\d+)?)\s*$/.test(line) &&
+              Number(line.slice(line.lastIndexOf(":") + 1)) <= 80,
+          ),
+      "One skill: years per line; use 0–80 years only.",
     ),
-  availabilityNotes: z.string().max(2000, "Keep notes under 2000 characters."),
-  citizenship: z.string(),
-  yearsExperience: z.union([z.number().nonnegative(), z.null()]),
-  fitThreshold: z.number().min(0).max(100),
-  dailyCap: z.number().int().nonnegative(),
-  maxApplications: z.number().int().nonnegative(),
-  timezone: z.string().min(1),
-});
+    willingToRelocate: triState,
+    declineDemographics: z.enum(["", "decline"]),
+    desiredAmount: z.number().nonnegative().nullable(),
+    desiredCurrency: z.union([z.string().regex(/^[A-Z]{3}$/), z.literal("")]),
+    desiredPeriod: periodState,
+    mbaEnrolled: triState,
+    graduationYear: z.union([z.number().int().min(2000).max(2100), z.null()]),
+    availableFrom: z.string(),
+    availableUntil: z.string(),
+    locationsText: z.string(),
+    targetFunctionsText: z.string(),
+    exclusionsText: z.string(),
+    minimumCompensation: z.union([z.number().nonnegative(), z.null()]),
+    // Currency/period are stated, never inferred: no USD/year default exists anywhere.
+    // "" is the form's unset state — the mapping sends null, so it must validate.
+    compensationCurrency: z.union([
+      z.string().regex(/^[A-Z]{3}$/, "Three uppercase letters."),
+      z.literal(""),
+      z.null(),
+    ]),
+    compensationPeriod: periodState,
+    workAuthorization: triState,
+    requiresSponsorship: triState,
+    // ISO 3166-1 alpha-2 only; the field uppercases as you type.
+    authorizationCountriesText: z
+      .string()
+      .refine(
+        (text) => splitList(text).every((code) => /^[A-Z]{2}$/.test(code)),
+        "Two-letter country codes, e.g. US, DE.",
+      ),
+    availabilityNotes: z.string().max(2000, "Keep notes under 2000 characters."),
+    citizenship: z.string(),
+    yearsExperience: z.union([z.number().nonnegative(), z.null()]),
+    fitThreshold: z.number().min(0).max(100),
+    dailyCap: z.number().int().nonnegative(),
+    maxApplications: z.number().int().nonnegative(),
+    timezone: z.string().min(1),
+  })
+  .superRefine((value, context) => {
+    const parts = [value.desiredAmount !== null, !!value.desiredCurrency, !!value.desiredPeriod];
+    if (parts.some(Boolean) && !parts.every(Boolean))
+      context.addIssue({
+        code: "custom",
+        path: ["desiredAmount"],
+        message: "Specify amount, currency and period together, or clear all three.",
+      });
+  });
 
 type SettingsFormValues = z.infer<typeof settingsFormSchema>;
 
@@ -80,6 +108,16 @@ function splitList(text: string): string[] {
 
 function toFormValues(settings: PersonalSettings): SettingsFormValues {
   return {
+    resumeRenderer: settings.resumeRenderer ?? "cbs-letter-times",
+    skillExperienceText:
+      settings.screeningDefaults?.skillExperience
+        .map(({ skill, years }) => `${skill}: ${years}`)
+        .join("\n") ?? "",
+    willingToRelocate: toTriState(settings.screeningDefaults?.willingToRelocate ?? null),
+    declineDemographics: settings.screeningDefaults?.voluntaryDemographics ?? "",
+    desiredAmount: settings.screeningDefaults?.desiredCompensation?.amount ?? null,
+    desiredCurrency: settings.screeningDefaults?.desiredCompensation?.currency ?? "",
+    desiredPeriod: settings.screeningDefaults?.desiredCompensation?.period ?? "",
     mbaEnrolled: toTriState(settings.mbaEnrolled),
     graduationYear: settings.graduationYear,
     availableFrom: settings.availableFrom ?? "",
@@ -105,6 +143,26 @@ function toFormValues(settings: PersonalSettings): SettingsFormValues {
 
 function toSettings(values: SettingsFormValues): PersonalSettings {
   return {
+    resumeRenderer: values.resumeRenderer,
+    screeningDefaults: {
+      skillExperience: values.skillExperienceText
+        .split("\n")
+        .filter((line) => line.trim())
+        .map((line) => ({
+          skill: line.slice(0, line.lastIndexOf(":")).trim(),
+          years: Number(line.slice(line.lastIndexOf(":") + 1)),
+        })),
+      willingToRelocate: fromTriState(values.willingToRelocate),
+      voluntaryDemographics: values.declineDemographics || null,
+      desiredCompensation:
+        values.desiredAmount !== null && values.desiredCurrency && values.desiredPeriod
+          ? {
+              amount: values.desiredAmount,
+              currency: values.desiredCurrency,
+              period: values.desiredPeriod,
+            }
+          : null,
+    },
     mbaEnrolled: fromTriState(values.mbaEnrolled),
     graduationYear: values.graduationYear,
     availableFrom: values.availableFrom.trim() || null,
@@ -149,7 +207,7 @@ export function SettingsForm(): ReactElement {
     defaultValues: settings.data ? toFormValues(settings.data) : FALLBACK_VALUES,
     validators: { onSubmit: settingsFormSchema },
     onSubmit: async ({ value }) => {
-      await save.mutateAsync(toSettings(value));
+      await save.mutateAsync({ ...settings.data, ...toSettings(value) });
     },
   });
 
@@ -181,6 +239,92 @@ export function SettingsForm(): ReactElement {
       >
         <Stack spacing={2.5}>
           <Grid container spacing={2}>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <form.AppField name="skillExperienceText">
+                {(field) => (
+                  <field.TextField
+                    label="Skill-specific years of experience"
+                    multiline
+                    minRows={2}
+                    helperText="One skill: years per line. These are explicit facts; total experience is never substituted."
+                  />
+                )}
+              </form.AppField>
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+              <form.AppField name="willingToRelocate">
+                {(field) => (
+                  <field.Select
+                    label="Willing to relocate"
+                    optional
+                    emptyLabel="Unknown"
+                    items={TRI_STATE_ITEMS}
+                  />
+                )}
+              </form.AppField>
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+              <form.AppField name="declineDemographics">
+                {(field) => (
+                  <field.Select
+                    label="Voluntary demographics"
+                    optional
+                    emptyLabel="No saved preference"
+                    items={[{ value: "decline", label: "Prefer not to answer" }]}
+                  />
+                )}
+              </form.AppField>
+            </Grid>
+            <Grid size={{ xs: 12, sm: 4 }}>
+              <form.AppField name="desiredAmount">
+                {(field) => (
+                  <field.TextField
+                    label="Desired compensation"
+                    type="number"
+                    helperText="Separate from your search minimum; specify currency and period."
+                  />
+                )}
+              </form.AppField>
+            </Grid>
+            <Grid size={{ xs: 12, sm: 4 }}>
+              <form.AppField name="desiredCurrency">
+                {(field) => (
+                  <field.TextField
+                    label="Desired compensation currency"
+                    transform={(value) => value.toUpperCase()}
+                  />
+                )}
+              </form.AppField>
+            </Grid>
+            <Grid size={{ xs: 12, sm: 4 }}>
+              <form.AppField name="desiredPeriod">
+                {(field) => (
+                  <field.Select
+                    label="Desired compensation period"
+                    optional
+                    emptyLabel="Unknown"
+                    items={[
+                      { value: "year", label: "Per year" },
+                      { value: "hour", label: "Per hour" },
+                    ]}
+                  />
+                )}
+              </form.AppField>
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+              <form.AppField name="resumeRenderer">
+                {(field) => (
+                  <field.Select
+                    label="Resume renderer"
+                    items={[
+                      { value: "cbs-letter-times", label: "CBS (default)" },
+                      { value: "rendercv-classic", label: "RenderCV Classic" },
+                    ]}
+                    helperText="Changing renderer requires new document checks and application approval."
+                  />
+                )}
+              </form.AppField>
+            </Grid>
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <form.AppField name="mbaEnrolled">
                 {(field) => (
@@ -348,7 +492,7 @@ export function SettingsForm(): ReactElement {
                   <field.TextField
                     label="Fit threshold"
                     type="number"
-                    helperText="Records below this fit score stay undiscovered-tier."
+                    helperText="A display preference only. Eligible jobs remain schedulable at every score."
                     slotProps={{ htmlInput: { min: 0, max: 100, step: 1 } }}
                   />
                 )}
@@ -409,6 +553,13 @@ export function SettingsForm(): ReactElement {
 
 /** Initializer while the first fetch is in flight; the real values overlay once loaded. */
 const FALLBACK_VALUES: SettingsFormValues = {
+  resumeRenderer: "cbs-letter-times",
+  skillExperienceText: "",
+  willingToRelocate: "",
+  declineDemographics: "",
+  desiredAmount: null,
+  desiredCurrency: "",
+  desiredPeriod: "",
   mbaEnrolled: "",
   compensationCurrency: "",
   compensationPeriod: "",

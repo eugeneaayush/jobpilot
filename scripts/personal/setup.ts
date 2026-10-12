@@ -12,10 +12,17 @@ import {
   run,
   runtimeRoot,
 } from "./common";
+import { localToolsCapabilities, setupLocalTools } from "./local-tools";
 import { syntheticSources } from "./synthetic";
 
 export async function doctor(): Promise<string[]> {
   const missing: string[] = [];
+  let localTools: Awaited<ReturnType<typeof localToolsCapabilities>> | null = null;
+  try {
+    localTools = await localToolsCapabilities();
+  } catch {
+    missing.push("Locked Python local tools unavailable; run bun run personal:tools:setup");
+  }
   for (const [name, executable] of [
     ["PostgreSQL 17", path.join(postgresBin, "initdb")],
     [".NET 10", dotnet],
@@ -92,6 +99,7 @@ export async function doctor(): Promise<string[]> {
       {
         runtimeRoot,
         versions,
+        localTools,
         provider,
         readiness,
         missing: [...new Set(missing)],
@@ -184,6 +192,7 @@ export async function ensureDatabase(config: RuntimeConfig): Promise<void> {
 }
 
 export async function setup(): Promise<void> {
+  await setupLocalTools();
   await mkdir(runtimeRoot, { recursive: true, mode: 0o700 });
   await chmod(runtimeRoot, 0o700);
   if (!existsSync(path.join(postgresBin, "initdb"))) {

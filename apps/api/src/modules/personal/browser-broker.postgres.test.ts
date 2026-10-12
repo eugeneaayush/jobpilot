@@ -8,6 +8,7 @@ import {
   createPersonalTestDatabase,
   type PersonalTestDatabase,
   personalFixture,
+  refreshPersonalFixtureApproval,
 } from "./persistence-test-fixtures";
 import { jsonValue, objectValue, sha256 } from "./runtime";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
@@ -64,6 +65,10 @@ describe.skipIf(!connection)("broker with actual PostgreSQL receipt lifecycle", 
             return Response.json(await db.service.get(f.user.id, attemptId));
           const body = await request.json();
           const lease = { leaseOwner: "synthetic-broker", leaseGeneration: 1 };
+          if (route.endsWith("/authorize-transmission"))
+            return Response.json(
+              await db.service.authorizeTransmission(f.user.id, attemptId, lease),
+            );
           if (route.endsWith("/prepare"))
             return Response.json(await db.service.prepare(f.user.id, attemptId, lease));
           if (route.endsWith("/begin-submit"))
@@ -145,6 +150,7 @@ describe.skipIf(!connection)("broker with actual PostgreSQL receipt lifecycle", 
         answers: [{ key: "email", fieldName: "email", value: "synthetic@example.test" }],
       },
     };
+    await refreshPersonalFixtureApproval(db, f.user.id, recordId, input.manifest);
     const attempt = await db.service.start(f.user.id, input);
     attemptId = attempt.id;
     const config = {

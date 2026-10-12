@@ -24,6 +24,7 @@ export const personalQueryKeys = {
   dashboard: (filters: Record<string, unknown> = {}) =>
     [...personalQueryKeys.all, "dashboard", filters] as const,
   settings: () => [...personalQueryKeys.all, "settings"] as const,
+  approval: (recordId: string) => [...personalQueryKeys.all, "approval", recordId] as const,
   campaigns: (filters: Record<string, unknown> = {}) =>
     [...personalQueryKeys.all, "campaigns", filters] as const,
   readiness: () => [...personalQueryKeys.all, "readiness"] as const,
@@ -53,6 +54,10 @@ interface PersonalCampaignListQuery extends PaginationQuery {
 
 /** Per-endpoint query defs against the routes in docs/private-jobpilot-work.md. */
 export const personalQueries = {
+  approval: (recordId: string) => ({
+    queryKey: personalQueryKeys.approval(recordId),
+    queryFn: () => api.personal.approvals.records({ id: recordId }).get(),
+  }),
   recruiting: () => ({
     queryKey: personalQueryKeys.recruiting(),
     queryFn: () => api.personal.recruiting.get(),

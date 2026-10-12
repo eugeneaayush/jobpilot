@@ -1,5 +1,9 @@
 import { personalRecoveryResponseSchema } from "@jobpilot/contracts/personal-recovery";
-import { createPersonalTestDatabase, type PersonalTestDatabase } from "./persistence-test-fixtures";
+import {
+  approvePersonalFixture,
+  createPersonalTestDatabase,
+  type PersonalTestDatabase,
+} from "./persistence-test-fixtures";
 import { recoveryTransferFixture } from "./recovery-transfer-test-fixtures";
 import { jsonValue, objectValue } from "./runtime";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
@@ -162,6 +166,7 @@ describe.skipIf(!testUrl)("recovery transfer to an authorized current campaign",
     await f.prepare();
     await f.campaigns.stop(f.user.id, f.target.id);
     await f.campaigns.launch(f.user.id, f.target.id, true);
+    await approvePersonalFixture(db, f.user.id, f.record.id, f.target.id);
     const result = await f.campaigns.next(f.user.id, f.target.id, "synthetic");
     expect(result.status).toBe("idle");
     if (result.status !== "idle") throw new Error("Old transfer unexpectedly selected");
@@ -213,7 +218,7 @@ describe.skipIf(!testUrl)("recovery transfer to an authorized current campaign",
     ]);
     expect(raced[0]!.status).toBe("rejected");
     expect(raced[1]!.status).toBe("fulfilled");
-    await expect(start()).rejects.toThrow("Persisted eligibility, answers, document review");
+    await expect(start()).rejects.toThrow("Current renderer configuration");
     expect(await db.prisma.personalAttempt.count({ where: { recordId: f.record.id } })).toBe(1);
   });
 
@@ -242,6 +247,7 @@ describe.skipIf(!testUrl)("recovery transfer to an authorized current campaign",
     await f.prepare();
     await f.campaigns.stop(f.user.id, f.original.id);
     await f.campaigns.launch(f.user.id, f.original.id, true);
+    await approvePersonalFixture(db, f.user.id, f.record.id, f.original.id);
     const stale = await f.campaigns.next(f.user.id, f.original.id, "synthetic");
     expect(stale.status).toBe("idle");
     if (stale.status !== "idle") throw new Error("Explicit stale target unexpectedly selected");
