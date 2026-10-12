@@ -1,11 +1,13 @@
-import { describe, expect, it, mock } from "bun:test";
+import { fakeUserDelegate } from "./fakes";
+import { requireVerifiedEmail } from "./verified.middleware";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
-// Mocked before the import below: requireVerifiedEmail reads the shared db singleton directly.
 const state = { user: null as { id: string; emailVerified: boolean } | null };
-mock.module("@/common/database/prisma.client", () => ({
-  db: { user: { findUnique: async () => state.user } },
-}));
-const { requireVerifiedEmail } = await import("./verified.middleware");
+let restoreUsers: () => void;
+beforeAll(() => {
+  restoreUsers = fakeUserDelegate(async () => state.user);
+});
+afterAll(() => restoreUsers());
 
 describe("requireVerifiedEmail", () => {
   it("passes a verified user", async () => {

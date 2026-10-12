@@ -1,19 +1,20 @@
 import { type Cookie, Elysia } from "elysia";
 import { signAccessToken } from "@/common/auth/tokens";
-import { container } from "@/common/di/container";
 import { ApiTokenService } from "@/modules/auth/api-token.service";
-import { patApiTokenStub, stubPatVerify } from "@/modules/auth/fakes";
+import { authGuard, resolveAuthUser } from "./auth.middleware";
 import { errorMiddleware } from "./error.middleware";
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, it, spyOn } from "bun:test";
 
-// Registered before the import below: auth.middleware resolves ApiTokenService from the
-// container once at module load, and this file is the first to load it in the test process.
-container.registerInstance(ApiTokenService, patApiTokenStub);
-const { authGuard, resolveAuthUser } = await import("./auth.middleware");
+// Spy on the prototype instead of swapping the DI instance: auth.middleware keeps whichever
+// instance it resolved first, so a swap leaks into every later file in the shared test process.
+let verifyPat: ReturnType<typeof spyOn<ApiTokenService, "verify">>;
+beforeAll(() => {
+  verifyPat = spyOn(ApiTokenService.prototype, "verify").mockResolvedValue(null);
+});
+afterEach(() => verifyPat.mockResolvedValue(null));
+afterAll(() => verifyPat.mockRestore());
 
 const jwt = () => signAccessToken({ id: "user-1", role: "USER", email: "user@example.test" });
-
-afterEach(() => stubPatVerify(async () => null));
 
 describe("resolveAuthUser", () => {
   it("returns null for an anonymous request", async () => {
@@ -41,7 +42,7 @@ describe("resolveAuthUser", () => {
   });
 
   it("prefers the JWT over a PAT when the bearer is a valid access token", async () => {
-    stubPatVerify(async () => ({ id: "agent-1", role: "USER", email: "agent@example.test" }));
+    verifyPat.mockResolvedValue({ id: "agent-1", role: "USER", email: "agent@example.test" });
 
     const user = await resolveAuthUser({
       headers: { authorization: `Bearer ${await jwt()}` },
@@ -52,11 +53,7 @@ describe("resolveAuthUser", () => {
   });
 
   it("falls back to the PAT verifier for a non-JWT bearer", async () => {
-    let seen: string | undefined;
-    stubPatVerify(async (raw) => {
-      seen = raw;
-      return { id: "agent-1", role: "USER", email: "agent@example.test" };
-    });
+    verifyPat.mockResolvedValue({ id: "agent-1", role: "USER", email: "agent@example.test" });
 
     const user = await resolveAuthUser({
       headers: { authorization: "Bearer raw-pat-token" },
@@ -64,12 +61,10 @@ describe("resolveAuthUser", () => {
     });
 
     expect(user).toEqual({ id: "agent-1", role: "USER", email: "agent@example.test" });
-    expect(seen).toBe("raw-pat-token");
+    expect(verifyPat).toHaveBeenLastCalledWith("raw-pat-token");
   });
 
   it("returns null when neither the JWT nor the PAT verifier recognizes the token", async () => {
-    stubPatVerify(async () => null);
-
     expect(
       await resolveAuthUser({ headers: { authorization: "Bearer junk" }, cookie: {} }),
     ).toBeNull();

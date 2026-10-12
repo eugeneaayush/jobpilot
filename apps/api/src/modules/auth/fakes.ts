@@ -1,7 +1,5 @@
-import type { AuthUser } from "@/common/auth";
 import type { Mailer, MailMessage } from "@/common/mail/mailer";
 import type { PrismaClient } from "@/generated/prisma/client";
-import type { ApiTokenService } from "./api-token.service";
 import { spyOn } from "bun:test";
 
 type Row = Record<string, unknown>;
@@ -216,17 +214,3 @@ export function freezeClock(ms: number): () => void {
   const spy = spyOn(Date, "now").mockReturnValue(ms);
   return () => spy.mockRestore();
 }
-
-// auth.middleware resolves ApiTokenService from the container at import; the middleware tests
-// register this shared stub first so the PAT fallback is observable without a database.
-let patVerify: (raw: string) => Promise<AuthUser | null> = async () => null;
-
-export const stubPatVerify = (
-  impl: (raw: string) => Promise<AuthUser | null> | AuthUser | null,
-) => {
-  patVerify = async (raw) => await impl(raw);
-};
-
-export const patApiTokenStub = {
-  verify: (raw: string) => patVerify(raw),
-} as unknown as ApiTokenService;

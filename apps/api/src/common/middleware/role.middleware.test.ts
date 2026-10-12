@@ -1,19 +1,22 @@
 import { Elysia } from "elysia";
 import { signAccessToken } from "@/common/auth/tokens";
-import { container } from "@/common/di/container";
 import { ApiTokenService } from "@/modules/auth/api-token.service";
-import { patApiTokenStub } from "@/modules/auth/fakes";
 import { errorMiddleware } from "./error.middleware";
-import { describe, expect, it, mock } from "bun:test";
+import { fakeUserDelegate } from "./fakes";
+import { requireRole, requireRoleOn } from "./role.middleware";
+import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 
-// Both registered before the import below: role.middleware reads the db singleton directly and
-// pulls in auth.middleware, whose module-level container.resolve must not bind a real PrismaClient.
 const state = { role: null as string | null };
-mock.module("@/common/database/prisma.client", () => ({
-  db: { user: { findUnique: async () => (state.role ? { role: state.role } : null) } },
-}));
-container.registerInstance(ApiTokenService, patApiTokenStub);
-const { requireRole, requireRoleOn } = await import("./role.middleware");
+let restoreUsers: () => void;
+let verifyPat: ReturnType<typeof spyOn<ApiTokenService, "verify">>;
+beforeAll(() => {
+  restoreUsers = fakeUserDelegate(async () => (state.role ? { role: state.role } : null));
+  verifyPat = spyOn(ApiTokenService.prototype, "verify").mockResolvedValue(null);
+});
+afterAll(() => {
+  restoreUsers();
+  verifyPat.mockRestore();
+});
 
 const jwt = (role: string) => signAccessToken({ id: "user-1", role, email: "user@example.test" });
 
