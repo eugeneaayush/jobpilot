@@ -103,7 +103,13 @@ export function CampaignComposer(props: CampaignComposerProps): ReactElement {
         return;
       }
 
-      const campaign = await createCampaign.mutateAsync(buildCreateCampaignRequest(effective));
+      // onError already toasted; a rethrow would escape handleSubmit as an uncaught rejection.
+      const campaign = await createCampaign
+        .mutateAsync(buildCreateCampaignRequest(effective))
+        .catch(() => null);
+      if (!campaign) {
+        return;
+      }
       const campaignId = campaign.campaignId;
       router.push(`/campaigns/${encodeURIComponent(campaignId)}`);
 

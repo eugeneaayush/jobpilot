@@ -25,10 +25,13 @@ export function ResetPasswordForm(props: ResetPasswordFormProps): ReactElement {
   const form = useAppForm({
     defaultValues: { token, password: "" } satisfies ResetPasswordInput,
     validators: { onSubmit: ResetPasswordSchema },
-    onSubmit: async ({ value }) => {
-      await resetPassword.mutateAsync(value);
-      toast.success("Password updated. Please sign in.");
-      router.push("/login");
+    onSubmit: ({ value }) => {
+      resetPassword.mutate(value, {
+        onSuccess: () => {
+          toast.success("Password updated. Please sign in.");
+          router.push("/login");
+        },
+      });
     },
   });
 

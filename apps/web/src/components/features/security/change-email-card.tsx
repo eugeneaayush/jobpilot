@@ -24,9 +24,8 @@ export function ChangeEmailCard(): ReactElement {
   const form = useAppForm({
     defaultValues: DEFAULT_VALUES,
     validators: { onSubmit: ChangeEmailSchema },
-    onSubmit: async ({ value }) => {
-      await changeEmail.mutateAsync(value);
-      form.reset();
+    onSubmit: ({ value }) => {
+      changeEmail.mutate(value, { onSuccess: () => form.reset() });
     },
   });
 

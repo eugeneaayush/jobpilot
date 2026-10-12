@@ -18,7 +18,9 @@ export function ForgotPasswordForm(): ReactElement {
   const form = useAppForm({
     defaultValues: DEFAULT_VALUES,
     validators: { onSubmit: ForgotPasswordSchema },
-    onSubmit: ({ value }) => forgotPassword.mutateAsync(value),
+    onSubmit: ({ value }) => {
+      forgotPassword.mutate(value);
+    },
   });
 
   if (forgotPassword.isSuccess) {

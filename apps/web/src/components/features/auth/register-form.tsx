@@ -15,8 +15,8 @@ export function RegisterForm(): ReactElement {
   const form = useAppForm({
     defaultValues: DEFAULT_VALUES,
     validators: { onSubmit: RegisterSchema },
-    onSubmit: async ({ value }) => {
-      await register.mutateAsync(value);
+    onSubmit: ({ value }) => {
+      register.mutate(value);
     },
   });
 

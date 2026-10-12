@@ -69,11 +69,10 @@ export function LeadsPanel(): ReactElement {
       }),
     { invalidate: [personalQueryKeys.all], successMessage: "Unverified lead saved" },
   );
-  const resolve = useApiMutation<PersonalLead, string>(
-    (id) =>
-      api.personal
-        .leads({ id })
-        .resolve.post({ campaignId, runId: campaign!.authorization!.runId }),
+  const runId = campaign?.authorization?.runId;
+  // runId rides the variables: the React Compiler reads a closure's `!` paths on every render.
+  const resolve = useApiMutation<PersonalLead, { id: string; campaignId: string; runId: string }>(
+    ({ id, ...body }) => api.personal.leads({ id }).resolve.post(body),
     { invalidate: [personalQueryKeys.all] },
   );
   return (
@@ -175,12 +174,10 @@ export function LeadsPanel(): ReactElement {
             )}
             <Button
               sx={{ alignSelf: "flex-start" }}
-              disabled={
-                !campaign?.authorization ||
-                resolve.isPending ||
-                lead.resolution.status === "resolved"
-              }
-              onClick={() => resolve.mutate(lead.id)}
+              disabled={!runId || resolve.isPending || lead.resolution.status === "resolved"}
+              onClick={() => {
+                if (runId) resolve.mutate({ id: lead.id, campaignId, runId });
+              }}
             >
               Resolve official posting
             </Button>

@@ -45,13 +45,19 @@ export function ProposalComposer(): ReactElement {
     } satisfies FormValues,
     validators: { onSubmit: formSchema },
     onSubmit: async ({ value }) => {
-      const created = await createProposal.mutateAsync({
-        jobTitle: value.jobTitle.trim(),
-        clientName: value.clientName.trim() || null,
-        jobUrl: value.jobUrl.trim() || null,
-        jobDescription: value.jobDescription.trim(),
-        status: "draft",
-      });
+      // onError already toasted; a rethrow would escape handleSubmit as an uncaught rejection.
+      const created = await createProposal
+        .mutateAsync({
+          jobTitle: value.jobTitle.trim(),
+          clientName: value.clientName.trim() || null,
+          jobUrl: value.jobUrl.trim() || null,
+          jobDescription: value.jobDescription.trim(),
+          status: "draft",
+        })
+        .catch(() => null);
+      if (!created) {
+        return;
+      }
 
       await agent.injectSkill("upwork-proposal", String(created.id));
       router.push(`/upwork/${created.id}` as Route);

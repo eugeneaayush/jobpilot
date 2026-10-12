@@ -273,8 +273,8 @@ export function CampaignCard(): ReactElement {
   const form = useAppForm({
     defaultValues: CAMPAIGN_DEFAULTS,
     validators: { onSubmit: campaignFormSchema },
-    onSubmit: async ({ value }) => {
-      await create.mutateAsync(toCreateInput(value));
+    onSubmit: ({ value }) => {
+      create.mutate(toCreateInput(value));
     },
   });
 

@@ -206,8 +206,8 @@ export function SettingsForm(): ReactElement {
   const form = useAppForm({
     defaultValues: settings.data ? toFormValues(settings.data) : FALLBACK_VALUES,
     validators: { onSubmit: settingsFormSchema },
-    onSubmit: async ({ value }) => {
-      await save.mutateAsync({ ...settings.data, ...toSettings(value) });
+    onSubmit: ({ value }) => {
+      save.mutate({ ...settings.data, ...toSettings(value) });
     },
   });
 

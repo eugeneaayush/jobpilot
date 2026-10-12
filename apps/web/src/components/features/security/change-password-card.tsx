@@ -31,9 +31,8 @@ export function ChangePasswordCard(): ReactElement {
   const form = useAppForm({
     defaultValues: DEFAULT_VALUES,
     validators: { onSubmit: ChangePasswordSchema },
-    onSubmit: async ({ value }) => {
-      await changePassword.mutateAsync(value);
-      form.reset();
+    onSubmit: ({ value }) => {
+      changePassword.mutate(value, { onSuccess: () => form.reset() });
     },
   });
 

@@ -19,6 +19,9 @@ const choices = [
   { value: "901", label: "Research" },
   { value: "902", label: "Trading" },
 ];
+// Handed to Bun's `.rejects` while still pending, these fills stalled 7-10 s in Playwright, past
+// the 2 s page timeout. Settling each fill before asserting avoids the stall.
+const settle = (promise: Promise<unknown>) => promise.catch(() => undefined);
 async function fixture(react: boolean, partial = false) {
   const page = await browser.newPage();
   page.setDefaultTimeout(2000);
@@ -91,9 +94,9 @@ describe("bounded Greenhouse multiselect controls", () => {
   test("a control that drops a selected value holds instead of claiming success", async () => {
     const f = await fixture(false, true);
     try {
-      await expect(fillGreenhouseField(f.page, await f.inspect(), ["901", "902"])).rejects.toThrow(
-        "complete option set was not retained",
-      );
+      const fill = fillGreenhouseField(f.page, await f.inspect(), ["901", "902"]);
+      await settle(fill);
+      await expect(fill).rejects.toThrow("complete option set was not retained");
     } finally {
       await f.page.close();
     }
@@ -101,9 +104,9 @@ describe("bounded Greenhouse multiselect controls", () => {
   test("unknown native selections are rejected before changing a control", async () => {
     const f = await fixture(false);
     try {
-      await expect(fillGreenhouseField(f.page, await f.inspect(), ["901", "999"])).rejects.toThrow(
-        "unique exact approved choice",
-      );
+      const fill = fillGreenhouseField(f.page, await f.inspect(), ["901", "999"]);
+      await settle(fill);
+      await expect(fill).rejects.toThrow("unique exact approved choice");
       expect((await f.inspect()).selectedValues).toEqual([]);
     } finally {
       await f.page.close();

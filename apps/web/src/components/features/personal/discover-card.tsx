@@ -116,11 +116,11 @@ export function DiscoverCard(props: DiscoverCardProps): ReactElement {
   const form = useAppForm({
     defaultValues: DISCOVER_DEFAULTS,
     validators: { onSubmit: discoverFormSchema },
-    onSubmit: async ({ value }) => {
+    onSubmit: ({ value }) => {
       const employer = value.employer.trim();
       const sourceUrl = value.sourceUrl.trim();
       const isCbs = value.source === "cbs";
-      await discover.mutateAsync({
+      discover.mutate({
         source: value.source,
         boardToken: isCbs ? "cbs-paste" : value.boardToken.trim(),
         ...(value.region !== "" && { region: value.region }),
@@ -182,7 +182,7 @@ export function DiscoverCard(props: DiscoverCardProps): ReactElement {
             type="submit"
             variant="contained"
             startIcon={<TravelExplore fontSize="sm" />}
-            disabled={!discoverEnabled}
+            disabled={!discoverEnabled || discover.isPending}
           >
             Discover
           </Button>
