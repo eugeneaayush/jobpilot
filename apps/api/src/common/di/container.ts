@@ -1,6 +1,7 @@
 import "reflect-metadata";
 import { container } from "tsyringe";
 import { db } from "@/common/database/prisma.client";
+import { logger } from "@/common/logger";
 import { ConsoleMailer, MAILER, ResendMailer } from "@/common/mail";
 import { VAPID_CONFIG, type VapidConfigHolder } from "@/common/push/push.service";
 import { env } from "@/env";
@@ -13,7 +14,11 @@ container.registerInstance(PrismaClient, db);
 // Bind the Mailer token: Resend when an API key is configured, otherwise a console
 // mailer that logs magic links for local dev. Registered here so it exists before
 // controllers resolve services (e.g. AuthService) at import.
-container.registerSingleton(MAILER, env.RESEND_API_KEY ? ResendMailer : ConsoleMailer);
+const mailer = env.RESEND_API_KEY ? ResendMailer : ConsoleMailer;
+container.registerSingleton(MAILER, mailer);
+if (env.NODE_ENV === "production" && mailer === ConsoleMailer) {
+  logger.warn("RESEND_API_KEY is unset: verification and reset emails will not be sent");
+}
 
 // Web push VAPID config, or null when unconfigured. Wrapped in a holder so PushService gets a value
 // (not undefined) either way, and so env - which validates at load - is only touched here, never in

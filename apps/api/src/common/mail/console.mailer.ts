@@ -9,11 +9,17 @@ import type { Mailer, MailMessage } from "./mailer";
 /**
  * Logs the rendered email (incl. any magic links) instead of sending. Bound to
  * the {@link MAILER} token when RESEND_API_KEY is unset, so local dev can copy
- * links out of the API console without a real email provider.
+ * links out of the API console without a real email provider. In hosted
+ * production it logs only the recipient and subject.
  */
 @singleton()
 export class ConsoleMailer implements Mailer {
   async send({ to, subject, react }: MailMessage): Promise<void> {
+    // The body carries live sign-in and reset links, which must never reach production logs.
+    if (env.NODE_ENV === "production" && !env.PERSONAL_MODE) {
+      logger.warn({ to, subject }, "[mail] not sent: RESEND_API_KEY is unset");
+      return;
+    }
     const text = await render(react, { plainText: true });
     if (env.PERSONAL_MODE) {
       const directory = path.join(env.STORAGE_ROOT, "mail");
