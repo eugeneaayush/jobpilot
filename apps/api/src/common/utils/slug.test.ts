@@ -15,7 +15,7 @@ describe("slugify", () => {
   });
 
   it("truncates and drops the dangling separator the cut can leave", () => {
-    expect(slugify("aaaa-bbbb-cccc", { maxLength: 9 })).toBe("aaaa-bbbb");
+    expect(slugify("aaaa-bbbb-cccc", { maxLength: 10 })).toBe("aaaa-bbbb");
   });
 
   it("falls back when nothing survives", () => {

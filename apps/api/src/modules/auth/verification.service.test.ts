@@ -7,7 +7,7 @@ import {
 import { env } from "@/env";
 import { type AuthDbState, freezeClock, makeAuthDb, makeMailer, type SentMail } from "./fakes";
 import { VerificationService } from "./verification.service";
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 const BASE = Date.parse("2026-10-12T10:00:00.000Z");
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -15,7 +15,7 @@ const HOUR_MS = 60 * 60 * 1000;
 
 type Row = Record<string, unknown>;
 
-let restoreClock: (() => void) | undefined;
+let restoreClock: () => void;
 
 const make = (users: Row[] = []) => {
   const { db, rows } = makeAuthDb({ users });
@@ -33,7 +33,7 @@ const user = (over: Row = {}) => ({
 
 const rawFrom = (mail: SentMail) => mail.link.split("token=")[1] as string;
 
-/** A verification-token row for a known raw value, expired by default. */
+/** A live verification-token row for a known raw value; override one field to break it. */
 function tokenRow(raw: string, over: Row = {}) {
   return {
     id: `vt-${raw}`,
@@ -41,7 +41,7 @@ function tokenRow(raw: string, over: Row = {}) {
     type: "EMAIL_VERIFICATION",
     tokenHash: hashToken(raw),
     consumedAt: null,
-    expiresAt: new Date(0),
+    expiresAt: new Date(BASE + HOUR_MS),
     newEmail: null,
     ...over,
   };
@@ -60,11 +60,15 @@ function refreshRow(rows: AuthDbState, raw: string, over: Row = {}) {
   return row;
 }
 
-afterEach(() => restoreClock?.());
+// Fixture expiries are BASE-relative, so the service must read BASE, not the wall clock.
+beforeEach(() => {
+  restoreClock = freezeClock(BASE);
+});
+
+afterEach(() => restoreClock());
 
 describe("sendVerificationEmail", () => {
   it("emails a link and stores only its hash, expiring in a day", async () => {
-    restoreClock = freezeClock(BASE);
     const { service, rows, sent } = make();
 
     await service.sendVerificationEmail("user-1", "who@example.test");
@@ -78,8 +82,9 @@ describe("sendVerificationEmail", () => {
       type: "EMAIL_VERIFICATION",
       consumedAt: null,
       tokenHash: hashToken(rawFrom(sent[0])),
-      expiresAt: new Date(BASE + DAY_MS),
     });
+    // Bun's toMatchObject counts any two Dates as equal, so expiries need toEqual.
+    expect(rows.verificationTokens[0].expiresAt).toEqual(new Date(BASE + DAY_MS));
   });
 
   it("supersedes older unconsumed links - only the latest works", async () => {
@@ -120,18 +125,42 @@ describe("verifyEmail", () => {
 
   it("rejects an expired token", async () => {
     const { service, rows } = make([user()]);
-    rows.verificationTokens.push(tokenRow("expired-raw"));
+    rows.verificationTokens.push(tokenRow("expired-raw", { expiresAt: new Date(BASE - 1) }));
 
-    await expect(service.verifyEmail("expired-raw")).rejects.toMatchObject({ status: 400 });
+    await expect(service.verifyEmail("expired-raw")).rejects.toMatchObject({
+      status: 400,
+      message: "Invalid or expired token",
+    });
+    expect(rows.users[0].emailVerified).toBe(false);
   });
 
-  it("rejects a token of the wrong type", async () => {
+  it("rejects a live token of another type, which its own flow still accepts", async () => {
+    const { service, rows } = make([user()]);
+    rows.verificationTokens.push(tokenRow("reset-raw", { type: "PASSWORD_RESET" }));
+
+    await expect(service.verifyEmail("reset-raw")).rejects.toMatchObject({
+      status: 400,
+      code: "INVALID_REQUEST",
+      message: "Invalid or expired token",
+    });
+    expect(rows.users[0].emailVerified).toBe(false);
+    await expect(service.resetPassword("reset-raw", "New-Pass-2!")).resolves.toEqual({ ok: true });
+  });
+
+  it("rejects an email-change link, so it cannot verify the current address", async () => {
     const { service, rows } = make([user()]);
     rows.verificationTokens.push(
-      tokenRow("reset-raw", { type: "PASSWORD_RESET", expiresAt: new Date(BASE + HOUR_MS) }),
+      tokenRow("change-raw", { type: "EMAIL_CHANGE", newEmail: "next@example.test" }),
     );
 
-    await expect(service.verifyEmail("reset-raw")).rejects.toMatchObject({ status: 400 });
+    await expect(service.verifyEmail("change-raw")).rejects.toMatchObject({
+      status: 400,
+      code: "INVALID_REQUEST",
+      message: "Invalid or expired token",
+    });
+    expect(rows.users[0]).toMatchObject({ email: "user@example.test", emailVerified: false });
+    expect(rows.verificationTokens[0].consumedAt).toBeNull();
+    await expect(service.confirmEmailChange("change-raw")).resolves.toEqual({ ok: true });
   });
 
   it("rejects an empty token", async () => {
@@ -172,7 +201,6 @@ describe("resendVerification", () => {
 
 describe("requestPasswordReset", () => {
   it("emails a reset link expiring in an hour", async () => {
-    restoreClock = freezeClock(BASE);
     const { service, rows, sent } = make([user()]);
 
     await service.requestPasswordReset(" User@Example.TEST ");
@@ -184,8 +212,8 @@ describe("requestPasswordReset", () => {
     expect(rows.verificationTokens[0]).toMatchObject({
       type: "PASSWORD_RESET",
       tokenHash: hashToken(rawFrom(sent[0])),
-      expiresAt: new Date(BASE + HOUR_MS),
     });
+    expect(rows.verificationTokens[0].expiresAt).toEqual(new Date(BASE + HOUR_MS));
   });
 
   it("succeeds without revealing whether the email exists", async () => {
@@ -235,7 +263,6 @@ describe("resetPassword", () => {
 
 describe("sendEmailChangeEmail", () => {
   it("mails the NEW address and records it on the token", async () => {
-    restoreClock = freezeClock(BASE);
     const { service, rows, sent } = make([user()]);
 
     await service.sendEmailChangeEmail("user-1", "next@example.test");
@@ -246,8 +273,8 @@ describe("sendEmailChangeEmail", () => {
     expect(rows.verificationTokens[0]).toMatchObject({
       type: "EMAIL_CHANGE",
       newEmail: "next@example.test",
-      expiresAt: new Date(BASE + HOUR_MS),
     });
+    expect(rows.verificationTokens[0].expiresAt).toEqual(new Date(BASE + HOUR_MS));
   });
 });
 
@@ -279,15 +306,19 @@ describe("confirmEmailChange", () => {
     expect(rows.users[0].email).toBe("user@example.test");
   });
 
-  it("rejects a token that carries no new address", async () => {
+  it("rejects a live token that carries no new address, leaving the email as it was", async () => {
     const { service, rows } = make([user()]);
-    rows.verificationTokens.push(
-      tokenRow("bare-raw", { type: "EMAIL_CHANGE", expiresAt: new Date(BASE + HOUR_MS) }),
-    );
+    rows.verificationTokens.push(tokenRow("bare-raw", { type: "EMAIL_CHANGE" }));
 
     await expect(service.confirmEmailChange("bare-raw")).rejects.toMatchObject({
       status: 400,
+      code: "INVALID_REQUEST",
       message: "Invalid or expired token",
     });
+    expect(rows.users[0]).toMatchObject({ email: "user@example.test", emailVerified: false });
+    expect(rows.verificationTokens[0].consumedAt).toBeNull();
+
+    rows.verificationTokens[0].newEmail = "next@example.test";
+    await expect(service.confirmEmailChange("bare-raw")).resolves.toEqual({ ok: true });
   });
 });

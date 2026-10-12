@@ -129,13 +129,15 @@ describe("getOrCreateTerminalToken", () => {
 describe("list", () => {
   it("returns only live tokens, newest first, without any hash or cipher", async () => {
     const { service, rows } = make();
-    tokenRow(rows, "a", { name: "oldest" });
-    tokenRow(rows, "b", { name: "newest" });
-    tokenRow(rows, "c", { name: "gone", revokedAt: new Date(0) });
+    // Out of createdAt order, so neither insertion order nor its reverse passes for the service.
+    tokenRow(rows, "a", { name: "middle", createdAt: new Date(2_000) });
+    tokenRow(rows, "b", { name: "newest", createdAt: new Date(3_000) });
+    tokenRow(rows, "c", { name: "oldest", createdAt: new Date(1_000) });
+    tokenRow(rows, "d", { name: "gone", createdAt: new Date(4_000), revokedAt: new Date(0) });
 
     const listed = await service.list("user-1");
 
-    expect(listed.map((token) => token.name)).toEqual(["newest", "oldest"]);
+    expect(listed.map((token) => token.name)).toEqual(["newest", "middle", "oldest"]);
     for (const token of listed) {
       expect(token).not.toHaveProperty("tokenHash");
       expect(token).not.toHaveProperty("tokenCipher");

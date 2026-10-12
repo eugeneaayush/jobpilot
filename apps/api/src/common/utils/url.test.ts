@@ -17,9 +17,9 @@ describe("parseCanonicalUrl", () => {
   });
 
   it("leaves a clean url untouched, scheme and trailing slash included", () => {
-    const url = parseCanonicalUrl("https://example.com/jobs/42?ref=linkedin", tracking);
+    const url = parseCanonicalUrl("http://example.com/jobs/42/?ref=linkedin", tracking);
 
-    expect(url?.href).toBe("https://example.com/jobs/42?ref=linkedin");
+    expect(url?.href).toBe("http://example.com/jobs/42/?ref=linkedin");
   });
 
   it("returns null for non-http schemes and unparseable input", () => {

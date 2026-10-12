@@ -1,15 +1,16 @@
-import { hashToken, verifyAccessToken } from "@/common/auth/tokens";
+import { durationToMs, hashToken, verifyAccessToken } from "@/common/auth/tokens";
 import { env } from "@/env";
 import { AuthService } from "./auth.service";
 import { type AuthDbState, freezeClock, makeAuthDb } from "./fakes";
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 type Row = Record<string, unknown>;
 
 const BASE = Date.parse("2026-10-12T10:00:00.000Z");
 const PASSWORD = "Sup3r-Secret!";
+const REFRESH_TTL_MS = durationToMs(env.REFRESH_TOKEN_EXPIRY, 30 * 86_400_000);
 
-let restoreClock: (() => void) | undefined;
+let restoreClock: () => void;
 
 const svc = (over: Partial<AuthDbState> = {}) => {
   const { db, rows } = makeAuthDb(over);
@@ -38,7 +39,7 @@ function refreshRow(rows: AuthDbState, raw: string, over: Row = {}) {
     id: `refresh-${rows.refreshTokens.length + 1}`,
     userId: "user-1",
     tokenHash: hashToken(raw),
-    expiresAt: new Date(BASE + 30 * 86_400_000),
+    expiresAt: new Date(BASE + REFRESH_TTL_MS),
     revokedAt: null,
     ...over,
   };
@@ -48,15 +49,18 @@ function refreshRow(rows: AuthDbState, raw: string, over: Row = {}) {
 
 const originalEnv = { PERSONAL_MODE: env.PERSONAL_MODE, SUPER_ADMIN_EMAIL: env.SUPER_ADMIN_EMAIL };
 
+// Fixture expiries are BASE-relative, so the service must read BASE, not the wall clock.
+beforeEach(() => {
+  restoreClock = freezeClock(BASE);
+});
+
 afterEach(() => {
   Object.assign(env, originalEnv);
-  restoreClock?.();
-  restoreClock = undefined;
+  restoreClock();
 });
 
 describe("register", () => {
   it("issues a session and persists only the hashed refresh token", async () => {
-    restoreClock = freezeClock(BASE);
     const { service, rows } = svc();
 
     const session = await service.register({ email: " new@Example.test ", password: PASSWORD });
@@ -77,8 +81,9 @@ describe("register", () => {
       userId: session.user.id,
       tokenHash: hashToken(session.refreshToken),
       revokedAt: null,
-      expiresAt: new Date(BASE + 30 * 86_400_000),
     });
+    // Bun's toMatchObject counts any two Dates as equal, so the expiry needs toEqual.
+    expect(rows.refreshTokens[0].expiresAt).toEqual(new Date(BASE + REFRESH_TTL_MS));
     expect(rows.refreshTokens[0].tokenHash).not.toBe(session.refreshToken);
   });
 
@@ -220,7 +225,7 @@ describe("rotateRefresh", () => {
   it("rejects empty, unknown and expired tokens", async () => {
     const { service, rows } = svc();
     await seedUser(rows);
-    refreshRow(rows, "expired-raw", { expiresAt: new Date(0) });
+    refreshRow(rows, "expired-raw", { expiresAt: new Date(BASE - 1) });
 
     await expect(service.rotateRefresh("")).rejects.toMatchObject({
       status: 401,
@@ -230,7 +235,10 @@ describe("rotateRefresh", () => {
       status: 401,
       message: "Invalid or expired refresh token",
     });
-    await expect(service.rotateRefresh("expired-raw")).rejects.toMatchObject({ status: 401 });
+    await expect(service.rotateRefresh("expired-raw")).rejects.toMatchObject({
+      status: 401,
+      message: "Invalid or expired refresh token",
+    });
   });
 
   it("rejects a valid token whose user is gone", async () => {

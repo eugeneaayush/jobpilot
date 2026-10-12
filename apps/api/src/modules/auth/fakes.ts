@@ -1,8 +1,9 @@
 import type { Mailer, MailMessage } from "@/common/mail/mailer";
 import type { PrismaClient } from "@/generated/prisma/client";
-import { spyOn } from "bun:test";
+import { setSystemTime } from "bun:test";
 
 type Row = Record<string, unknown>;
+type OrderBy = Record<string, "asc" | "desc">;
 
 /** One recorded email; the magic link is pulled out of the React body element. */
 export interface SentMail {
@@ -38,6 +39,14 @@ function matches(row: Row, where: Row): boolean {
 
 function pick(row: Row, select: Row): Row {
   return Object.fromEntries(Object.keys(select).map((key) => [key, row[key]]));
+}
+
+/** Prisma's single-column `orderBy`; the auth queries only ever sort on a Date column. */
+function sorted(table: Row[], orderBy?: OrderBy): Row[] {
+  const [column, direction] = Object.entries(orderBy ?? {})[0] ?? [];
+  if (!column) return [...table];
+  const sign = direction === "desc" ? -1 : 1;
+  return [...table].sort((a, b) => sign * (Number(a[column]) - Number(b[column])));
 }
 
 export interface AuthDbState {
@@ -171,11 +180,18 @@ export function makeAuthDb(over: Partial<AuthDbState> = {}) {
       rows.apiTokens.push(row);
       return row;
     },
-    // orderBy createdAt desc mirrors insertion order reversed - ids and createdAt are monotonic.
-    findFirst: async ({ where }: { where: Row }) =>
-      [...rows.apiTokens].reverse().find((row) => matches(row, where)) ?? null,
-    findMany: async ({ where, select }: { where: Row; select?: Row }) => {
-      const hit = [...rows.apiTokens].reverse().filter((row) => matches(row, where));
+    findFirst: async ({ where, orderBy }: { where: Row; orderBy?: OrderBy }) =>
+      sorted(rows.apiTokens, orderBy).find((row) => matches(row, where)) ?? null,
+    findMany: async ({
+      where,
+      select,
+      orderBy,
+    }: {
+      where: Row;
+      select?: Row;
+      orderBy?: OrderBy;
+    }) => {
+      const hit = sorted(rows.apiTokens, orderBy).filter((row) => matches(row, where));
       return select ? hit.map((row) => pick(row, select)) : hit;
     },
     findUnique: async ({ where, include }: { where: Row; include?: Row }) => {
@@ -209,8 +225,10 @@ export function makeAuthDb(over: Partial<AuthDbState> = {}) {
   return { db: db as unknown as PrismaClient, rows };
 }
 
-/** Freeze Date.now() (the clock the services read for expiry math); returns the restore. */
+/** Freeze both Date.now() and `new Date()`: services stamp expiries with one and check them
+ *  with the other. Returns the restore; call it in afterEach or the frozen clock leaks into
+ *  every later file in the shared test process. */
 export function freezeClock(ms: number): () => void {
-  const spy = spyOn(Date, "now").mockReturnValue(ms);
-  return () => spy.mockRestore();
+  setSystemTime(new Date(ms));
+  return () => setSystemTime();
 }

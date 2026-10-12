@@ -83,10 +83,23 @@ describe("requireRoleOn", () => {
   const principal = (role: string) => ({
     user: { id: "user-1", role, email: "user@example.test" },
   });
+  const thrownBy = (check: () => void): unknown => {
+    try {
+      check();
+    } catch (error) {
+      return error;
+    }
+    return undefined;
+  };
+  const forbidden = { status: 403, code: "FORBIDDEN", message: "Insufficient permissions" };
 
   it("throws forbidden when the route-scoped role is missing", () => {
-    expect(() => requireRoleOn("SUPER_ADMIN")(principal("USER"))).toThrow();
-    expect(() => requireRoleOn("SUPER_ADMIN")(principal("ADMIN"))).toThrow();
+    expect(thrownBy(() => requireRoleOn("SUPER_ADMIN")(principal("USER")))).toMatchObject(
+      forbidden,
+    );
+    expect(thrownBy(() => requireRoleOn("SUPER_ADMIN")(principal("ADMIN")))).toMatchObject(
+      forbidden,
+    );
   });
 
   it("passes holders of the required role - and SUPER_ADMIN above it", () => {
