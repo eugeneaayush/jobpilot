@@ -61,7 +61,8 @@ interface WireRequest {
 }
 type TestTransport = (request: WireRequest) => Promise<Response>;
 
-// Only tests inject a transport; production always uses the browser's bounded requests.
+// Only tests inject a transport or a shorter form wait; production always uses the browser's
+// bounded requests and the 15 s wait.
 export class GreenhouseDriver implements BrowserDriver {
   private scope?: DriverScope;
   private context?: BrowserContext;
@@ -97,7 +98,13 @@ export class GreenhouseDriver implements BrowserDriver {
   private pendingResponse?: Promise<void>;
   private resolveResponse?: () => void;
   private routeError?: string;
-  constructor(private readonly options: { headless?: boolean; transport?: TestTransport } = {}) {}
+  constructor(
+    private readonly options: {
+      headless?: boolean;
+      transport?: TestTransport;
+      formTimeout?: number;
+    } = {},
+  ) {}
   configure(scope: DriverScope) {
     this.scope = scope;
   }
@@ -581,7 +588,9 @@ export class GreenhouseDriver implements BrowserDriver {
   }
   private async initializeForm() {
     if (!this.page) throw new Error("Greenhouse browser is not open");
-    await this.page.waitForSelector("form#application-form.application--form", { timeout: 15_000 });
+    await this.page.waitForSelector("form#application-form.application--form", {
+      timeout: this.options.formTimeout ?? 15_000,
+    });
     const loader = await this.page.evaluate(() => {
       const data = (
         window as unknown as {

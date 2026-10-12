@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { BrowserContext, Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { PersonalBrowserBroker } from "../../../../../plugin/scripts/personal-browser/core";
 import { GreenhouseDriver } from "../../../../../plugin/scripts/personal-browser/greenhouse-driver";
 import { manifestHash } from "./persistence-policy";
@@ -55,21 +55,21 @@ function application(extra = "", route = loader) {
     <button type="submit">Submit application</button></form>
     <script>window.__remixContext={state:{loaderData:{'routes/$url_token_.jobs_.$job_post_id':${JSON.stringify(route)}}}};</script>`);
 }
-async function fixture(html: string, status = 200) {
+async function fixture(html: string, status = 200, formTimeout?: number) {
   const root = await mkdtemp(join(tmpdir(), "greenhouse-security-synthetic-"));
   const requests: { url: string; method: string }[] = [];
   const driver = new GreenhouseDriver({
+    formTimeout,
     transport: async (request) => {
       requests.push({ url: request.url, method: request.method });
       if (request.url === posting) {
-        if (status === 302) {
-          const { context } = driver as unknown as { context: BrowserContext };
-          await context.setOffline(true);
+        // No setOffline: it stalled goto for 15 s and let a followed redirect pass as a timeout.
+        // The test's reason check catches that instead; `.invalid` never resolves.
+        if (status === 302)
           return new Response(null, {
             status,
             headers: { location: "https://outside.invalid/login" },
           });
-        }
         return new Response(html, { status, headers: { "content-type": "text/html" } });
       }
       if (request.url.startsWith("https://www.recaptcha.net/recaptcha/enterprise/bframe"))
@@ -207,6 +207,8 @@ describe("Greenhouse security shell classification", () => {
   test("missing form without a visible challenge remains an error", async () => {
     const f = await fixture(
       htmlDocument(`<div hidden>${controls.login}</div><p>Page unavailable</p>`),
+      200,
+      1_000,
     );
     try {
       expect((await failureFrom(f.driver.open(posting, f.root))).message).toContain(
@@ -232,13 +234,14 @@ describe("Greenhouse security shell classification", () => {
     }
   }, 15_000);
   test("external redirect and mismatched loader identity remain blocked", async () => {
-    for (const [html, status] of [
-      [htmlDocument(controls.login), 302],
-      [application("", { ...loader, jobPostId: "124" }), 200],
+    // ERR_FAILED means the driver refused the redirect; a followed one fails DNS instead.
+    for (const [html, status, reason] of [
+      [htmlDocument(controls.login), 302, "net::ERR_FAILED"],
+      [application("", { ...loader, jobPostId: "124" }), 200, "does not match its approved scope"],
     ] as const) {
       const f = await fixture(html, status);
       try {
-        await failureFrom(f.driver.open(posting, f.root));
+        expect((await failureFrom(f.driver.open(posting, f.root))).message).toContain(reason);
         expect(f.requests).toEqual([{ url: posting, method: "GET" }]);
         expect(f.driver.submissionEvidence()).toBeUndefined();
       } finally {
