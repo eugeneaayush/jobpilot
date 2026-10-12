@@ -13,14 +13,6 @@ const target = "https://boards.greenhouse.io/fixture/jobs/123";
 const pageUrl = "https://job-boards.greenhouse.io/fixture/jobs/123";
 const documentBytes = Buffer.from("%PDF-SYNTHETIC-ONLY");
 const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
-async function isolateRedirectBrowser(driver: GreenhouseDriver) {
-  // Routed fixture responses still work offline. A regressed redirect guard must
-  // not let Chromium's unrouted redirect fallback contact a real Greenhouse host.
-  const context = (driver as unknown as { context?: { setOffline(value: boolean): Promise<void> } })
-    .context;
-  if (!context) throw new Error("Synthetic browser context missing");
-  await context.setOffline(true);
-}
 async function fixture(
   options: {
     mode?: "success" | "challenge" | "lost" | "tamper" | "redirect";
@@ -100,13 +92,11 @@ async function fixture(
       const u = new URL(request.url);
       events.push(`${request.method} ${u.pathname}`);
       forwarded.push({ url: request.url, method: request.method });
-      if (options.redirectInitial && request.method === "GET" && request.url === pageUrl) {
-        await isolateRedirectBrowser(driver);
+      if (options.redirectInitial && request.method === "GET" && request.url === pageUrl)
         return new Response(null, {
           status: 302,
           headers: { location: target },
         });
-      }
       if (u.pathname.endsWith("/presigned_fields"))
         return Response.json(
           {
@@ -174,8 +164,7 @@ async function fixture(
       if (request.method === "POST") {
         expect(request.headers["x-unapproved-data"]).toBeUndefined();
         if (options.mode === "lost") throw new Error("Synthetic lost response");
-        if (options.mode === "redirect") {
-          await isolateRedirectBrowser(driver);
+        if (options.mode === "redirect")
           return new Response(null, {
             status: 307,
             headers: {
@@ -183,7 +172,6 @@ async function fixture(
               "access-control-allow-origin": "*",
             },
           });
-        }
         if (options.mode === "challenge")
           return Response.json(
             { code: "captcha-failed", security_code_recipient: "s***@example.test" },
@@ -415,7 +403,8 @@ describe("Greenhouse hosted driver", () => {
       } catch (caught) {
         error = caught;
       }
-      expect(error).toBeDefined();
+      // ERR_FAILED means the driver refused the redirect; a followed one fails DNS instead.
+      expect(String(error)).toContain("net::ERR_FAILED");
       expect(f.forwarded).toEqual([{ url: pageUrl, method: "GET" }]);
       expect(f.events).not.toContain("FROZEN");
       expect(f.driver.confirmed()).toBe(false);
