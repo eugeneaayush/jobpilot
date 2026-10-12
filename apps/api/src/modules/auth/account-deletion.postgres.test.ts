@@ -107,6 +107,106 @@ describe.skipIf(!connection)("account deletion against the migrated schema", () 
     expect(Object.keys(keptBefore).length).toBeGreaterThanOrEqual(8);
   });
 
+  test("waits for an in-flight resume insert and includes its file", async () => {
+    const { user } = await seedAccount(db);
+    let inserted!: () => void;
+    let release!: () => void;
+    const insertedSignal = new Promise<void>((resolve) => {
+      inserted = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const writer = db.prisma.$transaction(
+      async (tx) => {
+        await tx.resume.create({
+          data: { userId: user.id, label: "Late upload", sourceFilename: "late-upload.pdf" },
+        });
+        inserted();
+        await gate;
+      },
+      { timeout: 10_000 },
+    );
+    await insertedSignal;
+
+    const deletion = deleteAccountRecords(db.prisma, user.id);
+    // Let the deletion reach its row locks while the insert is still uncommitted.
+    await Bun.sleep(300);
+    release();
+    await writer;
+
+    expect((await deletion).map((file) => file.sourceFilename)).toContain("late-upload.pdf");
+  });
+
+  test("waits for an in-flight source replacement and lists the new file", async () => {
+    const { user, resume } = await seedAccount(db);
+    let updated!: () => void;
+    let release!: () => void;
+    const updatedSignal = new Promise<void>((resolve) => {
+      updated = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const writer = db.prisma.$transaction(
+      async (tx) => {
+        await tx.resume.update({
+          where: { id: resume.id },
+          data: { sourceFilename: "replaced-source.pdf" },
+        });
+        updated();
+        await gate;
+      },
+      { timeout: 10_000 },
+    );
+    await updatedSignal;
+
+    const deletion = deleteAccountRecords(db.prisma, user.id);
+    await Bun.sleep(300);
+    release();
+    await writer;
+
+    expect((await deletion).map((file) => file.sourceFilename)).toEqual(["replaced-source.pdf"]);
+  });
+
+  test("keeps its locks until the delete, so a resume insert arriving mid-deletion fails", async () => {
+    const { user, resume } = await seedAccount(db);
+    let held!: () => void;
+    let release!: () => void;
+    const heldSignal = new Promise<void>((resolve) => {
+      held = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    // Stalls the deletion at its resume lock, after it already holds the user lock.
+    const blocker = db.prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT id FROM resumes WHERE id = ${resume.id} FOR UPDATE`;
+        held();
+        await gate;
+      },
+      { timeout: 10_000 },
+    );
+    await heldSignal;
+
+    const deletion = deleteAccountRecords(db.prisma, user.id);
+    await Bun.sleep(300);
+    const lateInsert = db.prisma.resume
+      .create({ data: { userId: user.id, label: "Too late", sourceFilename: "too-late.pdf" } })
+      .then(
+        () => "inserted",
+        (error: unknown) => error,
+      );
+    await Bun.sleep(300);
+    release();
+    await blocker;
+    await deletion;
+
+    expect(await lateInsert).toBeInstanceOf(Error);
+    expect(await db.prisma.resume.count({ where: { sourceFilename: "too-late.pdf" } })).toBe(0);
+  });
+
   test("refuses an account that owns a personal attempt ledger", async () => {
     const owner = await personalFixture(db);
     const prepared = await owner.record();

@@ -1,5 +1,6 @@
 import { mkdir, readdir, stat, unlink, utimes, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { logger } from "@/common/logger";
 import { slugify } from "@/common/utils/slug";
 import { env } from "@/env";
 
@@ -44,6 +45,13 @@ async function tryUnlink(filePath: string): Promise<boolean> {
 
 export async function deleteResumeFile(filename: string): Promise<void> {
   await tryUnlink(resumePath(filename));
+}
+
+/** Best-effort removal of an upload whose row was never written; never masks the caller's error. */
+export async function removeUnrecordedUpload(filename: string): Promise<void> {
+  await deleteResumeFile(filename).catch((err: unknown) =>
+    logger.warn({ err, filename }, "Could not remove an upload whose row was never written"),
+  );
 }
 
 /** Unlinks files in a directory matching any of the prefixes plus the suffix, in one scan. */
@@ -96,7 +104,8 @@ export async function deleteAllResumeArtifacts(refs: ResumeArtifactRefs): Promis
 export function generateResumeFilename(originalName: string): string {
   const ext = path.extname(originalName) || ".pdf";
   const slug = slugify(path.basename(originalName, ext), { fallback: "resume" });
-  return `${slug}-${Date.now()}${ext}`;
+  // The random part keeps two same-millisecond uploads from sharing, and so deleting, one file.
+  return `${slug}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}${ext}`;
 }
 
 export function slugifyForDownload(label: string): string {

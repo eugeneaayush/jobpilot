@@ -10,10 +10,19 @@ interface StoredResume {
   variants: { id: string }[];
 }
 
-function fakePrisma(options: { attempts?: number; resumes?: StoredResume[] } = {}) {
+function fakePrisma(
+  options: { attempts?: number; resumes?: StoredResume[]; userExists?: boolean } = {},
+) {
   const calls: string[] = [];
   const deleted: string[] = [];
   const db = {
+    $transaction: async (run: (tx: unknown) => Promise<unknown>) => run(db),
+    $queryRaw: async (sql: TemplateStringsArray, ...values: unknown[]) => {
+      const text = sql.join("?");
+      const table = text.match(/FROM (\w+)/)?.[1];
+      calls.push(`${/FOR UPDATE/.test(text) ? "lock" : "select"}:${table}:${values.join(",")}`);
+      return table === "users" && options.userExists !== false ? [{ id: values[0] }] : [];
+    },
     personalAttempt: {
       count: async (args: { where: { userId: string } }) => {
         calls.push(`personalAttempt.count:${args.where.userId}`);
@@ -48,7 +57,13 @@ describe("deleteAccountRecords", () => {
 
     const files = await deleteAccountRecords(db, "u1");
 
-    expect(calls).toEqual(["personalAttempt.count:u1", "resume.findMany:u1", "user.delete:u1"]);
+    expect(calls).toEqual([
+      "lock:users:u1",
+      "personalAttempt.count:u1",
+      "lock:resumes:u1",
+      "resume.findMany:u1",
+      "user.delete:u1",
+    ]);
     expect(deleted).toEqual(["u1"]);
     expect(files).toEqual([
       { resumeId: "r1", sourceFilename: "r1.pdf", variantIds: ["v1", "v2"] },
@@ -61,6 +76,16 @@ describe("deleteAccountRecords", () => {
 
     expect(await deleteAccountRecords(db, "u1")).toEqual([]);
     expect(deleted).toEqual(["u1"]);
+  });
+
+  it("404s and deletes nothing when the user is already gone", async () => {
+    const { db, deleted } = fakePrisma({ userExists: false });
+
+    const error = await deleteAccountRecords(db, "u1").catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(HttpError);
+    expect((error as HttpError).status).toBe(404);
+    expect(deleted).toEqual([]);
   });
 
   it("refuses with 409 and deletes nothing when a personal attempt ledger exists", async () => {

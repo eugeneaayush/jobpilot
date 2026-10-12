@@ -11,6 +11,7 @@ import {
   ensureResumesDir,
   generatedResumePath,
   generateResumeFilename,
+  removeUnrecordedUpload,
   resumePath,
   slugifyForDownload,
 } from "@/common/storage/storage";
@@ -93,20 +94,27 @@ export class ResumeFileService {
     const dir = await ensureResumesDir();
     const filename = generateResumeFilename(file.name);
     const buffer = Buffer.from(await file.arrayBuffer());
-    await writeFile(path.join(dir, filename), buffer);
+    await writeFile(path.join(dir, filename), buffer, { flag: "wx" });
+
+    // Point the row at the new file before removing the old one: if the update fails (for example
+    // because the account was deleted meanwhile), the old source survives and the new file goes.
+    await this.prisma.resume
+      .update({
+        where: { id },
+        data: {
+          sourceFilename: filename,
+          sourceMimeType: file.type || "application/pdf",
+          sourceSizeBytes: file.size,
+        },
+      })
+      .catch(async (error: unknown) => {
+        await removeUnrecordedUpload(filename);
+        throw error;
+      });
 
     if (resume.sourceFilename) {
       await deleteResumeFile(resume.sourceFilename);
     }
-
-    await this.prisma.resume.update({
-      where: { id },
-      data: {
-        sourceFilename: filename,
-        sourceMimeType: file.type || "application/pdf",
-        sourceSizeBytes: file.size,
-      },
-    });
 
     return { id, sourceFilename: filename };
   }
