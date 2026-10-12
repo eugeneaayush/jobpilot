@@ -2,13 +2,14 @@ import {
   ChangeEmailSchema,
   ChangePasswordSchema,
   ConfirmEmailChangeSchema,
+  DeleteAccountSchema,
 } from "@jobpilot/contracts";
 import { Elysia } from "elysia";
 import { container } from "@/common/di/container";
 import { authGuard } from "@/common/middleware";
 import { RATE_LIMITS, rateLimit } from "@/common/rate-limit";
 import { okResponseSchema } from "@/types/response";
-import { REFRESH_COOKIE } from "./auth.cookies";
+import { clearAuthCookies, REFRESH_COOKIE } from "./auth.cookies";
 import { SecurityService } from "./security.service";
 import { VerificationService } from "./verification.service";
 
@@ -18,8 +19,9 @@ const verificationService = container.resolve(VerificationService);
 const limitEmailChangeConfirm = rateLimit(RATE_LIMITS.emailChangeConfirm);
 const limitPasswordChange = rateLimit(RATE_LIMITS.passwordChange);
 const limitEmailChange = rateLimit(RATE_LIMITS.emailChange);
+const limitAccountDelete = rateLimit(RATE_LIMITS.passwordChange);
 
-/** Signed-in account security: password change/set and the two-step email change. */
+/** Signed-in account security: password change/set, the two-step email change, account deletion. */
 export const securityController = new Elysia({ prefix: "/auth", detail: { tags: ["Auth"] } })
   // --- public ---
   .post("/email/change/confirm", ({ body }) => verificationService.confirmEmailChange(body.token), {
@@ -60,4 +62,27 @@ export const securityController = new Elysia({ prefix: "/auth", detail: { tags: 
       description:
         "Verifies the current password (when set), then emails a confirmation link to the new address. The login email only switches when that link is clicked; until then the old address keeps working.",
     },
-  });
+  })
+  .delete(
+    "/account",
+    async ({ user, body, cookie }) => {
+      const raw = cookie[REFRESH_COOKIE]?.value;
+      const result = await securityService.deleteAccount(
+        user.id,
+        body,
+        typeof raw === "string" ? raw : null,
+      );
+      clearAuthCookies(cookie);
+      return result;
+    },
+    {
+      body: DeleteAccountSchema,
+      beforeHandle: limitAccountDelete,
+      response: okResponseSchema,
+      detail: {
+        summary: "Delete the account",
+        description:
+          "Permanently deletes the signed-in user and everything they own (resumes and their files, applications, campaigns, contacts, tokens, linked accounts). Requires a browser session, the sign-in email typed as confirmation, and the current password when one is set. Clears the auth cookies.",
+      },
+    },
+  );

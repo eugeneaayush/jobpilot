@@ -4,11 +4,12 @@ import type { Metadata } from "next";
 import { ChangeEmailCard } from "@/components/features/security/change-email-card";
 import { ChangePasswordCard } from "@/components/features/security/change-password-card";
 import { ConnectedAccountsCard } from "@/components/features/security/connected-accounts-card";
+import { DeleteAccountCard } from "@/components/features/security/delete-account-card";
 import { PageHeader, PageShell } from "@/components/ui/layout";
 
 export const metadata: Metadata = {
   title: "Account security",
-  description: "Manage your sign-in email, password, and connected accounts.",
+  description: "Manage your sign-in email, password, connected accounts, and account deletion.",
 };
 
 interface SecurityPageProps {
@@ -21,7 +22,7 @@ export default function SecurityPage(props: SecurityPageProps): ReactElement {
       <PageHeader
         eyebrow="Account"
         title="Security"
-        description="Sign-in email, password, and connected accounts."
+        description="Sign-in email, password, connected accounts, and account deletion."
       />
       <ChangeEmailCard />
       <ChangePasswordCard />
@@ -29,6 +30,7 @@ export default function SecurityPage(props: SecurityPageProps): ReactElement {
       <Suspense fallback={<Skeleton variant="rounded" height={220} />}>
         <ConnectedAccounts searchParams={props.searchParams} />
       </Suspense>
+      <DeleteAccountCard />
     </PageShell>
   );
 }

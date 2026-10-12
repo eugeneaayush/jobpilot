@@ -19,6 +19,11 @@ export class CryptoService {
 
   constructor(private readonly prisma: PrismaClient) {}
 
+  /** Drop a deleted user's cached key so this process can no longer encrypt for them. */
+  forget(userId: string): void {
+    this.dekCache.delete(userId);
+  }
+
   private async getDek(userId: string): Promise<Buffer> {
     const cached = this.dekCache.get(userId);
     if (cached) {

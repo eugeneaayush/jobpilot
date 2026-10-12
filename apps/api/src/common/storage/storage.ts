@@ -78,7 +78,7 @@ export function deleteGeneratedVariantFiles(...variantIds: string[]): Promise<vo
   );
 }
 
-interface ResumeArtifactRefs {
+export interface ResumeArtifactRefs {
   resumeId: string;
   sourceFilename: string | null;
   variantIds: string[];
