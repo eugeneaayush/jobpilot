@@ -142,4 +142,20 @@ public sealed class WorkerHandoffTests
         await using var browser = new WorkerHandoffBrowser(start, TimeSpan.Zero);
         await Assert.ThrowsAsync<InvalidDataException>(() => browser.OpenAsync(CancellationToken.None));
     }
+
+    [Fact]
+    public async Task ProcessTransportDisposesABrowserThatClosedItsInput()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        using var temp = new TempDir();
+        var path = Path.Combine(temp.Root, "fixture.sh");
+        // A running child with stdin closed is what an exiting child looks like before it is reaped:
+        // still running, but the cancel write fails with a broken pipe.
+        File.WriteAllText(path, "read line\nexec 0<&-\nprintf '%s\\n' '{\"type\":\"ready\"}'\nsleep 20\n");
+        var start = new ProcessStartInfo("/bin/sh") { WorkingDirectory = temp.Root, UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, ArgumentList = { path } };
+        var browser = new WorkerHandoffBrowser(start, TimeSpan.Zero);
+        await browser.OpenAsync(CancellationToken.None);
+        Assert.True(browser.IsRunning);
+        await browser.DisposeAsync();
+    }
 }
