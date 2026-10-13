@@ -132,6 +132,17 @@ public sealed class AgentAdapterTests
         catch (ArgumentException) { }
     }
 
+    [Fact]
+    public async Task TerminateToleratesAChildThatExitedBeforeItsInputClosed()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        using var process = Process.Start(new ProcessStartInfo("/bin/sh") { UseShellExecute = false, RedirectStandardInput = true, ArgumentList = { "-c", "exit 0" } })!;
+        await process.WaitForExitAsync();
+        // Callers swallow a failed write to an exited child, which leaves the pipe marked broken.
+        try { await process.StandardInput.WriteLineAsync("{\"type\":\"cancel\"}"); } catch (IOException) { }
+        await ProcessAgentAdapter.TerminateAsync(process, TimeSpan.Zero);
+    }
+
     [Theory]
     [InlineData("completed", false)]
     [InlineData("needs_user", false)]
