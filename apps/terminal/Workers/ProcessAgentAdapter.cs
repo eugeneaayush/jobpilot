@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO.Pipes;
 using System.Text;
 using System.Text.Json;
 using JobPilot.Terminal.Common;
@@ -180,7 +181,16 @@ public abstract class ProcessAgentAdapter(WorkerOptions options) : IAgentAdapter
     {
         var began = Stopwatch.GetTimestamp();
         var descendants = await ProcessSignals.DescendantsAsync(process.Id);
-        try { process.StandardInput.Close(); } catch (InvalidOperationException) { }
+        // A write that raced the child's exit marks the pipe broken, and Close's flush rethrows it.
+        // Read the state before Close, which disconnects every pipe.
+        var inputBroken = false;
+        try
+        {
+            inputBroken = process.StandardInput.BaseStream is PipeStream { IsConnected: false };
+            process.StandardInput.Close();
+        }
+        catch (InvalidOperationException) { }
+        catch (IOException) when (inputBroken || process.HasExited) { }
         try
         {
             if (process.HasExited) return;
